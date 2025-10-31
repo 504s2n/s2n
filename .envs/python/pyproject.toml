@@ -1,0 +1,12 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.envs.default]
+path = ".envs/python/.venv"
+python = "3.11"
+
+[project]
+name = "project-root"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
