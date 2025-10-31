@@ -1,0 +1,19 @@
+# 필요한 파이썬 빌드용 의존성
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "s2n-py"
+version = "0.1.0"
+description = "Python open source vulnerability scanner"
+license = { file = "LICENSE" }
+readme = "README.md"
+authors = [{ name = "504 Lab" }]
+requires-python = ">=3.10"
+
+[tool.hatch.build]
+packages = ["src/s2n_py"]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
