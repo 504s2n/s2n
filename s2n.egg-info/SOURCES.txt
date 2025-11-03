@@ -1,0 +1,10 @@
+pyproject.toml
+core/crawler.py
+core/main.py
+core/plugins/xss.py
+s2n.egg-info/PKG-INFO
+s2n.egg-info/SOURCES.txt
+s2n.egg-info/dependency_links.txt
+s2n.egg-info/entry_points.txt
+s2n.egg-info/requires.txt
+s2n.egg-info/top_level.txt
