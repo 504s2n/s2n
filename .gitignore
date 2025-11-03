@@ -8,3 +8,4 @@
 .env.local
 .env.dev
 .env.prod
+dist/
