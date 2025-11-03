@@ -1,0 +1,2 @@
+[console_scripts]
+s2n = s2n.core.scanner:main
