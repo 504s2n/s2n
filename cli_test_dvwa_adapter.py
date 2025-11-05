@@ -154,6 +154,7 @@ def main():
     parser.add_argument("--pass", dest="password", help="비밀번호 (대화형/인자)", required=False)
     parser.add_argument("--profile-dir", help="Chrome 사용자 프로필 경로(옵션)", required=False)
     parser.add_argument("--headless", action="store_true", help="Headless 모드로 실행(권장하지 않음)", required=False)
+    parser.add_argument("--open-browser", action="store_true", help="로그인 후 브라우저를 열려면 지정(기본: 브라우저 열지 않고 쿠키만 출력)", required=False)
     args = parser.parse_args()
 
     # 1) base_url 확보 (필수)
@@ -197,7 +198,13 @@ def main():
     cookies = client.s.cookies.get_dict()
     print(f"[INFO] 얻은 쿠키: {cookies}")
 
-    # 5) 브라우저 자동 오픈(옵션: 항상 열도록 설계)
+    # 5) 브라우저 자동 오픈(옵션)
+    # 기본 동작: 브라우저를 열지 않고 쿠키값만 출력하고 종료합니다.
+    if not args.open_browser:
+        print("[INFO] --open-browser 미지정: 로그인 세션 쿠키를 출력하고 종료합니다.")
+        print(f"[INFO] 얻은 쿠키: {cookies}")
+        sys.exit(0)
+
     try:
         driver = open_logged_browser(base, cookies, profile_dir=args.profile_dir, headless=args.headless)
     except Exception as e:
