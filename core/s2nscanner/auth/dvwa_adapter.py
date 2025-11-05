@@ -1,65 +1,126 @@
 """
-DVWA 전용 어댑터 (로그인/세션/환경설정)
-- 목적: DVWA 사이트에 맞춘 인증/환경 조작을 캡슐화하여 플러그인에서 재사용 가능하게 함
-- 입력: HttpClient 인스턴스 (세션을 래핑한 객체), creds 리스트 등
-- 출력: 성공한 자격증명 튜플 | None
-"""         
+DVWAAdapter (로그인·세션·재사용 전용)
+- 목적: 플러그인이나 main에서 DVWA 로그인 세션을 공유할 수 있도록 관리
+- 기능:
+  1. authenticate(creds): 로그인 시도, 성공 시 (user, pass) 반환
+  2. is_authenticated(): index.php 요청으로 세션 유지 여부 검사
+  3. ensure_authenticated(): 세션 만료 시 자동 재로그인
+  4. get_client(): 현재 세션 HttpClient 반환
+  5. save_cookies(), load_cookies(): 쿠키 저장/복원
+- 사용 예시 (main.py 등에서):
+      adapter = DVWAAdapter(base_url="http://localhost/dvwa")
+      adapter.ensure_authenticated([("admin", "password")])
+      client = adapter.get_client()
+      r = client.get("http://localhost/dvwa/vulnerabilities/exec/")
+"""
 
 import re
-from typing import List, Tuple, Optional
+import json
+import time
+from threading import Lock
+from typing import List, Tuple, Optional, Dict
+from urllib.parse import urljoin
+
 from core.s2nscanner.http.client import HttpClient
 
 
 class DVWAAdapter:
-    """
-    DVWA 전용 어댑터 클래스
-    - base: DVWA가 올라간 base URL
-    - login_path: 로그인 페이지 경로 (기본 "/login.php")
-    - security_paths: 보안레벨 변경 페이지 후보 경로들 (환경마다 차이 있을 수 있음)
-    """
-
-    def __init__(self, base_url: str, login_path: str = "/login.php", security_paths=None):
+    def __init__(self, base_url: str, login_path="/login.php", index_path="/index.php", client: Optional[HttpClient] = None):
+        if not base_url:
+            raise ValueError("base_url을 지정하세요 (예: http://localhost/dvwa)")
         self.base = base_url.rstrip("/")
         self.login_path = login_path
-        # DVWA 배포마다 security page 위치가 다를 수 있어 후보를 둠
-        self.security_paths = security_paths or ["/dvwa/security.php", "/security.php"]
+        self.index_path = index_path
+        self._client = client or HttpClient()
+        self._lock = Lock()
+        self._last_auth = None
 
+    # -------------------------------
+    # 내부: CSRF 토큰 추출
+    # -------------------------------
     def _extract_user_token(self, text: str) -> Optional[str]:
-        # DVWA의 CSRF 토큰을 HTML에서 뽑아냄. 입력(HTML 텍스트) -> 출력 (token 문자열 혹은 None)
-        # 이유: DVWA는 로그인/설정 POST시 user_token을 요구할 수 있음
-        m = re.search(r'name=["\']user_token["\']\s+value=["\']([^"\']+)["\']', text)
-        return m.group(1) if m else None
-    
-    def authenticate(self, client: HttpClient, creds: List[Tuple[str, str]]):
-        # client: HttpClient (requests.Session wrapper)
-        # 1. Get 로그인 페이지 -> 유저토큰 추출, 있으면 POST에 포함
-        # 2. POST 로그인 시도
-        # 3. 결과페이지에 logout 표시가 있으면 성공으로 판단
-        url = f"{self.base}{self.login_path}"
-        for u, p in creds:
-            try:
-                # 1. 로그인 페이지 조회 (토큰 추출용)
-                r = client.get(url, timeout=10)
-                token = self._extract_user_token(r.text)
+        match = re.search(r'name=["\']user_token["\']\s+value=["\']([^"\']+)["\']', text)
+        return match.group(1) if match else None
 
-                #2. 로그인 POST 데이터 준비
-                data = {"username": u, "password": p, "Login": "Login"}
+    # -------------------------------
+    # 로그인 시도
+    # -------------------------------
+    def authenticate(self, creds: List[Tuple[str, str]]) -> Optional[Tuple[str, str]]:
+        """DVWA 로그인 시도, 성공 시 (username, password) 반환"""
+        url = f"{self.base}{self.login_path}"
+        for user, pw in creds:
+            try:
+                # 로그인 페이지에서 토큰 추출
+                resp = self._client.get(url, timeout=10)
+                token = self._extract_user_token(resp.text)
+
+                data = {"username": user, "password": pw, "Login": "Login"}
                 if token:
                     data["user_token"] = token
-                
-                # 3. 로그인 시도
-                post = client.post(url, data=data, timeout=10)
 
-                # 4. 간단 휴리스틱: 'logout.php' 링크/문구 등으로 성공 판단
+                post = self._client.post(url, data=data, timeout=10)
+
                 if "logout.php" in (post.text or "") or "Logout" in (post.text or ""):
-                    return (u, p)
-                if "Login" not in (post.text or ""):
-                    return (u, p)
-            
+                    self._last_auth = (user, pw, time.time())
+                    return (user, pw)
             except Exception:
                 continue
         return None
-    
 
-def finalize(self, clinet: HttpClient):
-    return
+    # -------------------------------
+    # 세션 유지 여부 검사
+    # -------------------------------
+    def is_authenticated(self) -> bool:
+        """index.php 요청 시 로그인 상태면 True"""
+        try:
+            test_url = f"{self.base}{self.index_path}"
+            r = self._client.get(test_url, timeout=5)
+            text = r.text or ""
+            return "logout.php" in text or "Logout" in text
+        except Exception:
+            return False
+
+    # -------------------------------
+    # 세션 자동 유지
+    # -------------------------------
+    def ensure_authenticated(self, creds: List[Tuple[str, str]], retries=1):
+        """세션이 끊기면 자동으로 재로그인"""
+        if self.is_authenticated():
+            return True
+        for _ in range(retries + 1):
+            used = self.authenticate(creds)
+            if used:
+                return True
+            time.sleep(1)
+        return False
+
+    # -------------------------------
+    # 공용 client 반환
+    # -------------------------------
+    def get_client(self) -> HttpClient:
+        """현재 세션이 담긴 HttpClient 반환"""
+        return self._client
+
+    # -------------------------------
+    # 쿠키 저장/복원
+    # -------------------------------
+    def save_cookies(self, path: str):
+        """현재 세션 쿠키를 JSON으로 저장"""
+        try:
+            cookies = self._client.s.cookies.get_dict()
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(cookies, f, ensure_ascii=False, indent=2)
+            print(f"[INFO] 쿠키 저장 완료: {path}")
+        except Exception as e:
+            print(f"[WARN] 쿠키 저장 실패: {e}")
+
+    def load_cookies(self, path: str):
+        """저장된 쿠키 JSON을 불러와 세션에 주입"""
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                cookies = json.load(f)
+            for k, v in cookies.items():
+                self._client.s.cookies.set(k, v)
+            print(f"[INFO] 쿠키 복원 완료: {path}")
+        except Exception as e:
+            print(f"[WARN] 쿠키 복원 실패: {e}")
