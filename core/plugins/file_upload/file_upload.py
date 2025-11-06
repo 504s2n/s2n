@@ -1,3 +1,6 @@
+#참고 명령어: full_url = input("테스트할  취약점 페이지 전체 URL을 입력하세요 : ").strip()
+# 메인 클래스 (FileUploadVulnerability)
+
 import requests
 from bs4 import BeautifulSoup
 import os
@@ -352,3 +355,4 @@ def run_interactive():
 
 if __name__ == '__main__':
     run_interactive()
+
