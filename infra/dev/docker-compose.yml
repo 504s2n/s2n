@@ -1,0 +1,55 @@
+services:
+  dvwa_db:
+    # image: mysql:5.7 --> 구버전
+    image: mysql:latest
+    container_name: dvwa_db
+    platform: linux/amd64
+    environment:
+      # .env.dev에서 주입
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+    volumes:
+      - dvwa_db_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-p${MYSQL_ROOT_PASSWORD}",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 3
+  dvwa:
+    image: ghcr.io/digininja/dvwa:4aa0c38
+    container_name: dvwa_local
+    ports:
+      - "${HOST_PORT}:${CONTAINER_PORT}"
+    depends_on:
+      dvwa_db:
+        condition: service_healthy
+    environment:
+      DB_SERVER: ${DB_SERVER}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_DATABASE: ${MYSQL_DATABASE}
+    restart: unless-stopped
+
+volumes:
+  dvwa_db_data:
+# 추후 s2n 개발 시 - Hot Reload s2n from local
+# s2n-watcher:
+#   image: alpine
+#   container_name: s2n-watcher
+#   working_dir: /workspace
+#   volumes:
+#     - ../../core:/workspace/core
+#   command: sh -c "while true; do inotifywait -r -e modify,create,delete ./core && echo 'Detected changes, running tests...' && pytest core; done"

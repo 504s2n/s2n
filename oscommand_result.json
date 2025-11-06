@@ -1,0 +1,12 @@
+{
+  "target": "http://localhost/dvwa/vulnerabilities/exec/",
+  "vulnerable": true,
+  "payload": ";id",
+  "evidence": "vulnerable",
+  "details": {
+    "parameter": "ip",
+    "match": "vulnerable",
+    "method": "GET",
+    "response_code": 200
+  }
+}
