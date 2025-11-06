@@ -35,16 +35,12 @@ class DVWAAdapter:
         self._lock = Lock()
         self._last_auth = None
 
-    # -------------------------------
     # 내부: CSRF 토큰 추출
-    # -------------------------------
     def _extract_user_token(self, text: str) -> Optional[str]:
         match = re.search(r'name=["\']user_token["\']\s+value=["\']([^"\']+)["\']', text)
         return match.group(1) if match else None
 
-    # -------------------------------
     # 로그인 시도
-    # -------------------------------
     def authenticate(self, creds: List[Tuple[str, str]]) -> Optional[Tuple[str, str]]:
         """DVWA 로그인 시도, 성공 시 (username, password) 반환"""
         url = f"{self.base}{self.login_path}"
@@ -67,9 +63,7 @@ class DVWAAdapter:
                 continue
         return None
 
-    # -------------------------------
     # 세션 유지 여부 검사
-    # -------------------------------
     def is_authenticated(self) -> bool:
         """index.php 요청 시 로그인 상태면 True"""
         try:
@@ -80,9 +74,7 @@ class DVWAAdapter:
         except Exception:
             return False
 
-    # -------------------------------
     # 세션 자동 유지
-    # -------------------------------
     def ensure_authenticated(self, creds: List[Tuple[str, str]], retries=1):
         """세션이 끊기면 자동으로 재로그인"""
         if self.is_authenticated():
@@ -94,16 +86,12 @@ class DVWAAdapter:
             time.sleep(1)
         return False
 
-    # -------------------------------
     # 공용 client 반환
-    # -------------------------------
     def get_client(self) -> HttpClient:
         """현재 세션이 담긴 HttpClient 반환"""
         return self._client
 
-    # -------------------------------
     # 쿠키 저장/복원
-    # -------------------------------
     def save_cookies(self, path: str):
         """현재 세션 쿠키를 JSON으로 저장"""
         try:
