@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 oscommand.py — 완전 자동화 버전
 입력: base URL 1개
@@ -21,9 +20,7 @@ try:
 except Exception:
     from ..http.client import HttpClient  # type: ignore
 
-# -----------------------------
 # 기본 설정
-# -----------------------------
 PAYLOADS = [
     ";id", "&&id", "|id",
     ";whoami", "|whoami",
@@ -40,9 +37,7 @@ PATTERNS = [
 COMMON_PARAMS = ["id", "cmd", "ip", "input", "search", "q", "page", "file"]
 
 
-# -----------------------------
 # 크롤러: 내부 링크 재귀 탐색
-# -----------------------------
 def crawl_recursive(base_url: str, client: HttpClient, depth: int = 2, timeout: int = 5) -> List[str]:
     """base_url에서 시작해 내부 링크를 재귀적으로 수집"""
     visited = set()
@@ -84,9 +79,7 @@ def crawl_recursive(base_url: str, client: HttpClient, depth: int = 2, timeout: 
     return list(set(found_links))
 
 
-# -----------------------------
 # 파라미터 추출
-# -----------------------------
 def extract_params(html: str, url: str) -> List[str]:
     params = set()
     # URL 쿼리
@@ -101,9 +94,7 @@ def extract_params(html: str, url: str) -> List[str]:
     return list(params or COMMON_PARAMS)
 
 
-# -----------------------------
 # 스캐너: OS Command Injection 테스트
-# -----------------------------
 def test_os_command_injection(target: str, client: HttpClient, params: List[str], timeout: int = 5) -> dict:
     result = {"target": target, "vulnerable": False}
     try:
@@ -134,9 +125,7 @@ def test_os_command_injection(target: str, client: HttpClient, params: List[str]
     return result
 
 
-# -----------------------------
 # 결과 출력
-# -----------------------------
 def print_summary(vulns: List[dict]):
     CYAN = "\033[96m"
     GREEN = "\033[92m"
@@ -158,9 +147,7 @@ def print_summary(vulns: List[dict]):
     print(f"\n{CYAN}=============================={RESET}\n")
 
 
-# -----------------------------
-# 메인 실행부
-# -----------------------------
+
 if __name__ == "__main__":
     print("=== s2n 자동화 OS Command Injection 스캐너 ===")
     base = input("Base URL을 입력하세요 (예: http://localhost/dvwa): ").strip()
@@ -169,12 +156,48 @@ if __name__ == "__main__":
         sys.exit(1)
 
     depth = 2
+
+    # 1) HttpClient 생성 (공용 세션)
     try:
         client = HttpClient()
     except Exception:
         print("[ERROR] HttpClient 로드 실패")
         sys.exit(1)
 
+    # 2) 인증 요청 여부 묻기 (선택)
+    use_auth = input("인증이 필요하면 Y, 아니면 N (기본 N): ").strip().lower() == "y"
+    if use_auth:
+        username = input("Username: ").strip() or "admin"
+        import getpass
+        password = getpass.getpass("Password: ") or "password"
+
+        # DVWAAdapter에 같은 client 주입 — 중요!
+        from core.s2nscanner.auth.dvwa_adapter import DVWAAdapter
+        adapter = DVWAAdapter(base_url=base, client=client)
+
+        print(f"[INFO] 인증 시도: {username}/(hidden) -> base: {base}")
+        try:
+            ok = adapter.ensure_authenticated([(username, password)], retries=1)
+            if not ok:
+                print("[WARN] 로그인 실패 — 인증이 필요한 영역은 접근할 수 없습니다.")
+                # 여기서 계속 진행하려면 주석 처리, 안전하게 종료하려면 sys.exit(1)
+                # sys.exit(1)
+            else:
+                print("[INFO] 인증 성공 — 세션 쿠키가 client에 설정되었습니다.")
+                print("[DEBUG] 세션 쿠키:", client.s.cookies.get_dict())
+        except TypeError:
+            # 구버전의 adapter를 사용하는 경우(혹시 authenticate(client, creds) 호출했던 코드 남아있다면)
+            try:
+                # try legacy call if adapter expects (client, creds)
+                used = adapter.authenticate([(username, password)])
+                if used:
+                    print("[INFO] 인증 성공(legacy).")
+                else:
+                    print("[WARN] 인증 실패(legacy).")
+            except Exception as e:
+                print(f"[WARN] 인증 중 예외 발생: {e} — 계속 진행합니다.")
+
+    # 3) 로그인(세션) 이후 크롤/스캔 수행
     print(f"[INFO] {base} 에서 링크를 탐색 중 (depth={depth})...")
     targets = crawl_recursive(base, client, depth=depth, timeout=5)
     print(f"[INFO] 발견된 내부 페이지 수: {len(targets)}")
