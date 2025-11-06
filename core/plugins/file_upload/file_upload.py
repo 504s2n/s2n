@@ -1,131 +1,67 @@
-#참고 명령어: full_url = input("테스트할  취약점 페이지 전체 URL을 입력하세요 : ").strip()
 # 메인 클래스 (FileUploadVulnerability)
+#참고 명령어: full_url = input("테스트할  취약점 페이지 전체 URL을 입력하세요 : ").strip()
 
-import requests
-from bs4 import BeautifulSoup
-import os
-import tempfile
-import uuid
-import re
-from urllib.parse import urljoin, urlparse
-from collections import deque
 
+import requests  # HTTP 요청/세션 관리 라이브러리
+from bs4 import BeautifulSoup  # HTML을 파싱해 DOM 탐색을 쉽게 해주는 라이브러리
+import os  # 파일 경로/존재 확인 등 운영체제 관련 기능
+import tempfile  # 임시 파일/디렉터리 생성 유틸리티
+import uuid  # 고유한 파일명 생성을 위한 UUID 생성기
+import re  # 정규식으로 텍스트에서 패턴 검색/추출
+from urllib.parse import urljoin, urlparse  # URL 결합(urljoin)과 분해(urlparse)
+from collections import deque  # BFS(너비 우선 탐색)에 사용하는 큐 자료구조
+
+# 헬퍼 함수 임포트: 패키지 실행/모듈 실행/직접 실행 모두 지원
+try:
+    from .file_upload_functions import (  # 패키지 컨텍스트에서의 상대 임포트
+        find_upload_form,
+        collect_form_data,
+        find_login_form,
+        perform_login,
+        guess_uploaded_urls,
+    )
+except Exception:
+    try:
+        # 프로젝트 루트 기준 패키지 절대 임포트
+        from core.plugins.file_upload.file_upload_functions import (
+            find_upload_form,
+            collect_form_data,
+            find_login_form,
+            perform_login,
+            guess_uploaded_urls,
+        )
+    except Exception:
+        # 스크립트를 직접 실행한 경우: 현재 파일 디렉터리를 경로에 추가 후 로컬 임포트
+        import os as _os, sys as _sys
+        _sys.path.append(_os.path.dirname(__file__))
+        from file_upload_functions import (
+            find_upload_form,
+            collect_form_data,
+            find_login_form,
+            perform_login,
+            guess_uploaded_urls,
+        )
+
+# 이 모듈은 "파일 업로드 취약점"을 자동으로 확인하는 스캐너를 제공합니다.
+# - 주어진 페이지에서 파일 업로드 폼을 찾고
+# - 테스트용 파일을 업로드 시도하며
+# - 업로드가 성공했는지 다양한 방법으로 추정합니다.
 
 class FileUploadVulnerability:
-    """
-    범용 파일 업로드 취약점 검사기
-    - 업로드 폼 존재 여부 확인
-    - CSRF/hidden inputs 처리 시도
-    - 테스트 파일 업로드 시도 및 업로드 위치 추측
-    """
+   
+    #범용 파일 업로드 취약점 검사기
+    # - 업로드 폼 존재 여부 확인
+    # - CSRF/hidden inputs 처리 시도
+    # - 테스트 파일 업로드 시도 및 업로드 위치 추측
+   
 
     def __init__(self, upload_page_url, session=None):
+        # upload_page_url: 테스트할 파일 업로드 취약점 페이지 URL
+        # session: requests.Session 객체 (기본값: None, 새 세션 생성)
         self.upload_page_url = upload_page_url
         self.session = session or requests.Session()
 
-    def _find_upload_form(self, soup):
-        # 파일 입력이 포함된 첫 번째 form을 찾음
-        forms = soup.find_all('form')
-        for form in forms:
-            if form.find('input', {'type': 'file'}) is not None:
-                return form
-        return None
-
-    def _collect_form_data(self, form):
-        data = {}
-        for inp in form.find_all('input'):
-            itype = (inp.get('type') or '').lower()
-            name = inp.get('name')
-            if not name:
-                continue
-            # 파일 입력은 제외
-            if itype == 'file':
-                continue
-            # 제출 버튼은 제외
-            if itype in ('submit', 'button'):
-                continue
-            data[name] = inp.get('value', '')
-        return data
-
-    def _find_login_form(self, soup):
-        # password 입력을 포함한 form을 로그인 폼으로 간주
-        forms = soup.find_all('form')
-        for form in forms:
-            if form.find('input', {'type': 'password'}) is not None:
-                return form
-        return None
-
-    def _perform_login(self, form, base_url, username, password):
-        # form의 hidden/기타 필드를 수집하고 username/password 필드에 값을 넣어 제출
-        action = form.get('action') or base_url
-        action_url = urljoin(base_url, action)
-        data = {}
-        username_field = None
-        password_field = None
-        for inp in form.find_all('input'):
-            name = inp.get('name')
-            if not name:
-                continue
-            itype = (inp.get('type') or '').lower()
-            # 찾을 필드 이름 추정
-            if itype == 'password' and password_field is None:
-                password_field = name
-                continue
-            if itype in ('text', 'email') and username_field is None:
-                # prefer names containing user/login/email
-                nm = name.lower()
-                if any(k in nm for k in ('user', 'email', 'login', 'id')):
-                    username_field = name
-                elif username_field is None:
-                    username_field = name
-                # continue collecting hidden/default values below
-            # hidden or other inputs
-            if itype in ('hidden', 'submit'):
-                data[name] = inp.get('value', '')
-        # if not found username field, try to pick first text input
-        if username_field is None:
-            for inp in form.find_all('input'):
-                itype = (inp.get('type') or '').lower()
-                name = inp.get('name')
-                if itype in ('text', 'email') and name:
-                    username_field = name
-                    break
-        # finally, set credentials into data
-        if username_field:
-            data[username_field] = username
-        if password_field:
-            data[password_field] = password
-
-        try:
-            resp = self.session.post(action_url, data=data, timeout=10)
-            return resp
-        except Exception as e:
-            print(f"[!] Login request failed: {e}")
-            return None
-
-    def _guess_uploaded_urls(self, response, action_url):
-        # 응답 HTML에서 uploads 경로나 .php 링크를 찾음
-        soup = BeautifulSoup(response.text, 'html.parser')
-        candidates = []
-        # 1) Location header
-        loc = response.headers.get('Location')
-        if loc:
-            candidates.append(urljoin(action_url, loc))
-        # 2) a 태그의 href
-        for a in soup.find_all('a', href=True):
-            href = a['href']
-            if 'upload' in href.lower() or href.lower().endswith('.php') or 'uploads' in href.lower():
-                candidates.append(urljoin(action_url, href))
-        # 3) 텍스트에서 상대/절대 경로 추출
-        for m in re.findall(r"(?:href|src)=[\'\"]([^\'\"]+)[\'\"]", response.text, flags=re.I):
-            if 'upload' in m.lower() or m.lower().endswith('.php') or 'uploads' in m.lower():
-                candidates.append(urljoin(action_url, m))
-        # 고유화
-        seen = []
-        for c in candidates:
-            if c not in seen:
-                seen.append(c)
-        return seen
+    # helper functions moved to file_upload.functions module
 
     def test_file_upload(self):
         # 페이지 로드
@@ -135,21 +71,36 @@ class FileUploadVulnerability:
         except Exception as e:
             return {'vulnerable': False, 'message': f'Failed to fetch page: {e}'}
 
+        # 인증/쿠키 필요 여부 빠른 점검
+        try:
+            final_url = (resp.url or "").lower()
+            body_lower = resp.text.lower()
+        except Exception:
+            final_url = ""
+            body_lower = ""
+        if resp.status_code in (401, 403) or "login" in final_url or ("login" in body_lower and "password" in body_lower):
+            return {'vulnerable': False, 'message': '쿠키 값 또는 로그인이 필요한 페이지입니다. 접근 불가로 취약점 확인 불가.'}
+
         soup = BeautifulSoup(resp.text, 'html.parser')
-        form = self._find_upload_form(soup)
+        # soup: HTML 파싱 결과 (페이지의 DOM 구조를 다루기 쉽게 만들어 줌)
+        form = find_upload_form(soup)
+        # form: <input type="file">를 포함하는 첫 번째 <form> 요소 (없으면 None)
         found_at = self.upload_page_url
+        # found_at: 해당 form이 실제로 발견된 페이지 URL (링크 타고 이동 중 발견될 수 있어 기록)
 
         # 로그인 폼이 감지되면 별도의 로그인 플러그인에서 처리해야 하므로
         # 이 페이지 자체에 업로드 폼이 있는지 여부만 판단합니다.
         if form is None:
-            login_form = self._find_login_form(soup)
+            login_form = find_login_form(soup)
             if login_form is not None:
                 # 로그인 페이지로 판단됨 — 로그인 없이 이 페이지에서 업로드 폼이 없으므로 취약점 없음으로 간주
                 return {'vulnerable': False, 'message': 'Page requires login; no upload form found on this login page.'}
 
         # 추가 탐색: 파일 input이 폼 바깥에 존재하는 경우, data-* 혹은 onclick 등에 upload 관련 엔드포인트가 있을 수 있음
         candidate_urls = set()
+        # candidate_urls: 페이지 내 스크립트/속성에서 추출한 업로드 관련 후보 엔드포인트 모음
         parsed_root = urlparse(self.upload_page_url)
+        # parsed_root: 스킴/호스트 등을 분리해 동일 호스트 탐색(BFS)에 활용
 
         # 1) file input이 폼 바깥에 있는지 체크
         if form is None:
@@ -198,7 +149,9 @@ class FileUploadVulnerability:
             print("[*] Upload form not found on the provided page — searching links on the same host...")
             max_pages = 60
             visited = set()
+            # visited: 이미 확인한 페이지 URL 집합 (중복 방문 방지)
             q = deque()
+            # q: BFS(너비 우선 탐색) 큐. (url, soup) 튜플을 넣고 하나씩 꺼내며 검사
             q.append((self.upload_page_url, soup))
             pages_checked = 0
             while q and pages_checked < max_pages:
@@ -206,7 +159,7 @@ class FileUploadVulnerability:
                 pages_checked += 1
                 visited.add(current_url)
                 # check current
-                form = self._find_upload_form(current_soup)
+                form = find_upload_form(current_soup)
                 if form is not None:
                     found_at = current_url
                     break
@@ -243,7 +196,7 @@ class FileUploadVulnerability:
                         r = self.session.get(trial, timeout=8)
                         if r.status_code == 200:
                             qsoup = BeautifulSoup(r.text, 'html.parser')
-                            form = self._find_upload_form(qsoup)
+                            form = find_upload_form(qsoup)
                             if form is not None:
                                 found_at = trial
                                 soup = qsoup
@@ -258,7 +211,7 @@ class FileUploadVulnerability:
                             r = self.session.get(cand, timeout=6)
                             if r.status_code == 200:
                                 qsoup = BeautifulSoup(r.text, 'html.parser')
-                                form = self._find_upload_form(qsoup)
+                                form = find_upload_form(qsoup)
                                 if form is not None:
                                     found_at = cand
                                     soup = qsoup
@@ -279,7 +232,7 @@ class FileUploadVulnerability:
         if method != 'post':
             return {'vulnerable': False, 'message': f'Upload form method is not POST (method={method}). Cannot upload.'}
 
-        data = self._collect_form_data(form)
+        data = collect_form_data(form)
         print(f"[*] Found upload form -> action: {action_url}, enctype: {enctype}, extra fields: {list(data.keys())}")
 
         # 파일 입력 이름
@@ -287,6 +240,8 @@ class FileUploadVulnerability:
         file_field_name = file_input.get('name') or 'file'
 
         # 테스트 파일 생성
+        # 실제로 업로드 가능한지 확인하기 위해 임시 디렉터리에 작은 PHP 파일을 만듭니다.
+        # 파일 내용에 "File Upload Test" 문자열을 넣어 업로드 후 접근 시 확인합니다.
         test_content = '<?php echo "File Upload Test"; ?>'
         tmp_dir = tempfile.gettempdir()
         filename = f"test_upload_{uuid.uuid4().hex}.php"
@@ -297,6 +252,7 @@ class FileUploadVulnerability:
 
         files = {}
         fobj = open(test_path, 'rb')
+        # requests의 files 인자는 {필드이름: (파일명, 파일객체, MIME)} 형식의 튜플을 사용합니다.
         files[file_field_name] = (filename, fobj, 'application/x-php')
 
         try:
@@ -306,6 +262,7 @@ class FileUploadVulnerability:
             except Exception as e:
                 return {'vulnerable': False, 'message': f'Upload request failed: {e}'}
             finally:
+                # 업로드 요청의 성공/실패와 상관없이 파일 객체는 반드시 닫아 리소스를 해제합니다.
                 try:
                     fobj.close()
                 except Exception:
@@ -313,7 +270,8 @@ class FileUploadVulnerability:
 
             # 업로드 성공 여부 추정
             # 1) 응답에서 업로드된 파일 링크 추출
-            candidates = self._guess_uploaded_urls(response, action_url)
+            # guess_uploaded_urls: 응답의 헤더/본문/링크에서 업로드 위치로 보이는 URL들을 모아줍니다.
+            candidates = guess_uploaded_urls(response, action_url)
             for url in candidates:
                 try:
                     r = self.session.get(url, timeout=10)
@@ -329,7 +287,7 @@ class FileUploadVulnerability:
             return {'vulnerable': False, 'message': 'No evidence of successful upload found.'}
 
         finally:
-            # 임시파일 정리
+            # 임시파일 정리: 스캔이 끝나면 테스트 파일은 반드시 삭제합니다.
             try:
                 if os.path.exists(test_path):
                     os.remove(test_path)
