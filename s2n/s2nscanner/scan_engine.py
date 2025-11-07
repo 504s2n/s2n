@@ -74,7 +74,7 @@ class Scanner:
         
         self.logger.info("Discovering plugins dynamically...")
         try:
-            package = "s2n.core.s2nscanner.plugins"
+            package = "s2n.s2nscanner.plugins"
             pkg = importlib.import_module(package)
             for _, modname, _ in pkgutil.iter_modules(pkg.__path__):
                 module = importlib.import_module(f"{package}.{modname}")
