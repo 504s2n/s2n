@@ -6,3 +6,4 @@
 from .file_upload import FileUploadVulnerability
 
 __all__ = ["FileUploadVulnerability"]
+Plugin = FileUploadVulnerability
