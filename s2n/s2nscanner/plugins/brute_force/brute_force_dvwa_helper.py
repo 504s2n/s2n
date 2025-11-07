@@ -6,10 +6,8 @@ import time
 
 ##### 유연한 모듈 임포트 처리 #####
 
-try:
-    from .brute_force_config import USER_FIELD_NAME
-except ImportError:
-    from brute_force_config import USER_FIELD_NAME
+from .brute_force_config import USER_FIELD_NAME
+
 
 
 def perform_dvwa_login_and_setup(driver, full_url):

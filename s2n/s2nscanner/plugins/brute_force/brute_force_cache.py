@@ -4,15 +4,8 @@ import datetime
 
 ##### 유연한 모듈 임포트 처리 #####
 
-try:
-    # 1. 모듈 실행 시도 (상대 경로)
-    from .brute_force_config import CACHE_FILE, CACHE_EXPIRY_DAYS
-    from .brute_force_crawling import get_korean_password_list_with_selenium, url as crawl_url
-except ImportError:
-    # 2. 파일 직접 실행 시도 (절대 경로)
-    from brute_force_config import CACHE_FILE, CACHE_EXPIRY_DAYS
-    from brute_force_crawling import get_korean_password_list_with_selenium, url as crawl_url
-
+from .brute_force_config import CACHE_FILE, CACHE_EXPIRY_DAYS
+from .brute_force_crawling import get_korean_password_list_with_selenium, url as crawl_url
 
 def load_passwords_from_cache():
     """캐시 파일에서 비밀번호 목록을 로드하고 만료 여부를 확인합니다."""

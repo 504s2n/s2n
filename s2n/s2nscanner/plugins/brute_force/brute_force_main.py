@@ -2,19 +2,10 @@ import sys
 from urllib.parse import urlparse
 import time
 
-##### 모듈 임포트: 실행 환경에 따라 상대/절대 경로 자동 선택 #####
-try:
-    # 1. 모듈 실행 시도 (상대 경로)
-    from .brute_force_cache import initialize_password_list
-    from .brute_force_selenium import setup_driver, scan_brute_force_with_selenium
-    from .brute_force_dvwa_helper import perform_dvwa_login_and_setup
-    from .brute_force_crawling import url as crawl_url
-except ImportError:
-    # 2. 파일 직접 실행 시도 (절대 경로)
-    from brute_force_cache import initialize_password_list
-    from brute_force_selenium import setup_driver, scan_brute_force_with_selenium
-    from brute_force_dvwa_helper import perform_dvwa_login_and_setup
-    from brute_force_crawling import url as crawl_url
+from .brute_force_cache import initialize_password_list
+from .brute_force_selenium import setup_driver, scan_brute_force_with_selenium
+from .brute_force_dvwa_helper import perform_dvwa_login_and_setup
+from .brute_force_crawling import url as crawl_url
 
 
 def print_password_list(password_list, source_url):

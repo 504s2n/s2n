@@ -6,6 +6,7 @@ import logging
 import importlib
 from typing import List, Optional, Dict, Any
 import click 
+from dataclasses import asdict
 
 import warnings
 warnings.filterwarnings("ignore", category=Warning)
@@ -14,11 +15,12 @@ from s2n.s2nscanner.http.client import HttpClient
 from s2n.s2nscanner.scan_engine import Scanner, ScanReport
 from s2n.s2nscanner.crawler import crawl_recursive
 from s2n.s2nscanner.auth.dvwa_adapter import DVWAAdapter
+from s2n.s2nscanner.interfaces import Finding, Severity
 
 # config loader
 def load_config(path: Optional[str]) -> Dict[str, Any]:
     if not path:
-        return {}
+        return {}   
     try:
         if path.endswith(".json"):
             with open(path, "r", encoding="utf-8") as f:
@@ -124,6 +126,13 @@ def scan(ctx, urls, plugins, auth_type, username, password, output, depth):
     logger: logging.Logger = ctx.obj["logger"]
     cfg = ctx.obj.get("config") or {}
 
+    # URL 확보
+    if urls and len(urls) > 0:
+        target = urls[0]
+    else:
+        target = click.prompt("테스트할 대상 URL을 입력하세요", type=str)
+    logger.info("Target URL: %s", target)
+
     scanner = Scanner(
         plugins=None,
         config=cfg,
@@ -135,50 +144,138 @@ def scan(ctx, urls, plugins, auth_type, username, password, output, depth):
     discovered = scanner.discover_plugins()
     logger.info("Discovered %d plugins", len(discovered))
 
-    if plugins: 
-        discovered = filter_plugins_by_name(discovered, list(plugins))
-        if not discovered:
-            raise click.ClickException(f"No matching plugins for {plugins}")
-        scanner._discovered_plugins = discovered
+    # 결과 저장용 리스트
+    findings: List[Finding] = []
+    started_at = datetime.utcnow().isoformat() if hasattr(datetime, "utcnow") else None
 
-        if auth_type:
-            if auth_type.lower() == "dvwa":
-                if not username or not password:
-                    raise click.ClickException("DVWA 인증을 위해 --username과 --password를 모두 지정하세요.")
-                adapter = DVWAAdapter(base_url=str(urls[0]))
-                creds = [(username, password)]
-                ok = adapter.ensure_authenticated(creds)
-                if not ok:
-                    raise click.ClickException("DVWA 로그인 실패")
+    
+    # --- 1) brute_force 먼저 실행 (플러그인에 있으면) ---
+    try:
+        bf_plugins = [p for p in discovered if getattr(p, "name", "").lower() == "brute_force"]
+        if bf_plugins:
+            bf = bf_plugins[0]
+            logger.info("Running brute_force before authentication (results will be stored).")
+            try:
+                raw = bf.run(target)
+                # raw는 dict 리스트를 반환한다고 가정
+                for i, r in enumerate(raw or []):
+                    sev_val = r.get("severity", "INFO") if isinstance(r, dict) else "INFO"
+                    try:
+                        sev = Severity(sev_val)
+                    except Exception:
+                        sev = Severity.INFO
+                    f = Finding(
+                        id=r.get("id", f"bf-{i}") if isinstance(r, dict) else f"bf-{i}",
+                        plugin=getattr(bf, "name", "brute_force"),
+                        severity=sev,
+                        title=r.get("title", "Brute force finding") if isinstance(r, dict) else "Brute force finding",
+                        description=r.get("description", "") if isinstance(r, dict) else "",
+                        url=r.get("url", target) if isinstance(r, dict) else target,
+                        payload=r.get("payload") if isinstance(r, dict) else None,
+                        evidence=r.get("evidence") if isinstance(r, dict) else None,
+                    )
+                    findings.append(f)
+                logger.info("brute_force finished (%d findings)", len(raw or []))
+            except Exception as e:
+                logger.exception("brute_force plugin error (continuing): %s", e)
+        else:
+            logger.debug("No brute_force plugin discovered; skipping brute step.")
+    except Exception as e:
+        logger.exception("Error while attempting brute_force step (continuing): %s", e)
+
+    # --- 2) DVWA 로그인(필요시) ---
+    if "dvwa" in (target or "").lower():
+        logger.info("DVWA target detected: attempting authentication via DVWAAdapter")
+        # 우선 전달된 username/password 없으면 프롬프트
+        dvwa_user = username or click.prompt("DVWA username", default="admin")
+        dvwa_pass = password or click.prompt("DVWA password", hide_input=True)
+        try:
+            adapter = DVWAAdapter(base_url=target)
+            ok = adapter.ensure_authenticated([(dvwa_user, dvwa_pass)])
+            if ok:
+                logger.info("DVWA 로그인 완료")
                 scanner.auth_adapter = adapter
                 scanner.http_client = adapter.get_client()
-                logger.info("DVWA Adapter 인증 완료")
             else:
-                raise click.ClickException(f"지원하지 않는 인증 타입입니다: {auth_type}")
+                logger.warning("DVWA 로그인 실패: 계속 진행하되 인증이 필요한 플러그인은 실패할 수 있습니다")
+        except Exception as e:
+            logger.exception("DVWA adapter error (continuing without auth): %s", e)
 
-        targets = list(urls)
-        report: ScanReport = scanner.run(targets)
+    # --- 3) 나머지 플러그인 실행 (brute_force는 이미 수행했으니 건너뜀) ---
+    for p in discovered:
+        pname = getattr(p, "name", p.__class__.__name__).lower()
+        if pname == "brute_force":
+            continue
+        if plugins:
+            # 사용자가 -p 옵션으로 특정 플러그인만 실행 요청했으면 필터링
+            if pname not in [x.lower() for x in plugins]:
+                logger.debug("Skipping plugin %s due to -p filter", pname)
+                continue
+        logger.info("Running plugin: %s", pname)
+        try:
+            if not hasattr(p, "run"):
+                logger.debug("plugin %s has no run(): skipping", pname)
+                continue
+            raw = p.run(target)
+            for i, r in enumerate(raw or []):
+                # r은 dict-like 예상
+                if isinstance(r, Finding):
+                    findings.append(r)
+                    continue
+                sev_val = r.get("severity", "INFO") if isinstance(r, dict) else "INFO"
+                try:
+                    sev = Severity(sev_val)
+                except Exception:
+                    sev = Severity.INFO
+                f = Finding(
+                    id=r.get("id", f"{pname}-{i}") if isinstance(r, dict) else f"{pname}-{i}",
+                    plugin=pname,
+                    severity=sev,
+                    title=r.get("title", f"{pname} finding") if isinstance(r, dict) else f"{pname} finding",
+                    description=r.get("description", "") if isinstance(r, dict) else "",
+                    url=r.get("url", target) if isinstance(r, dict) else target,
+                    payload=r.get("payload") if isinstance(r, dict) else None,
+                    evidence=r.get("evidence") if isinstance(r, dict) else None,
+                )
+                findings.append(f)
+            logger.info("%s finished (%d findings)", pname, len(raw or []))
+        except Exception as e:
+            logger.exception("plugin %s failed (continuing): %s", pname, e)
 
-        results = {
-            "targets": report.targets,
-            "started_at": report.started_at.isoformat(),
-            "finished_at": report.finished_at.isoformat() if report.finished_at else None,
-            "findings": [f.__dict__ for f in report.findings],
-        }
+    # --- 4) 결과 정리 및 저장 ---
+    finished_at = datetime.utcnow().isoformat() if hasattr(datetime, "utcnow") else None
+    results = {
+        "targets": [target],
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "findings": [asdict(f) for f in findings],
+    }
 
-        if output:
-            with open(output, "w", encoding="utf-8") as f:
-                json.dump(results, f, indent=2, ensure_ascii=False)
-            logger.info("Saved scan results to %s", output)
-        else:
-            click.echo(json.dumps(results, indent=2, ensure_ascii=False))
+    out_path = output or f"scan_results_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.json"
+    try:
+        with open(out_path, "w", encoding="utf-8") as fh:
+            json.dump(results, fh, indent=2, ensure_ascii=False)
+        logger.info("Saved scan results to %s", out_path)
+    except Exception as e:
+        logger.exception("Failed to save results file: %s", e)
 
+    # 요약 출력
+    click.echo("\n=== Scan Summary ===")
+    click.echo(f"Target: {target}")
+    click.echo(f"Total findings: {len(findings)}")
+    by_plugin = {}
+    for f in findings:
+        by_plugin[f.plugin] = by_plugin.get(f.plugin, 0) + 1
+    for k, v in by_plugin.items():
+        click.echo(f" - {k}: {v}")
+    click.echo("====================\n")
 
-        if report.findings:
-            logger.warning("Findings detected: exiting with code 1")
-            raise SystemExit(1)
-        logger.info("No findings: exiting with code 0")
-        raise SystemExit(0)
+    # 종료 코드: findings 있으면 1, 없으면 0
+    if findings:
+        logger.warning("Findings detected: exiting with code 1")
+        raise SystemExit(1)
+    logger.info("No findings: exiting with code 0")
+    raise SystemExit(0)
     
 if __name__ == "__main__":
     cli()
