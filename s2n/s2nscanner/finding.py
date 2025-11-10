@@ -1,8 +1,13 @@
 """
 Finding 처리 모듈
-
 이전 단계에서 생성된 Finding 객체들을 받아서
-다음 단계에 필요한 PluginResult, ScanSummary, ScanReport를 생성하는 함수들을 제공합니다.
+다음 단계에 필요한 객체를 생성하는 함수들입니다.
+
+함수 매개 변수와 함수 반환 타입 
+Args & Returns Types:
+- create_plugin_result -> PluginResult
+- create_scan_summary -> ScanSummary
+- create_scan_report -> ScanReport
 """
 
 from datetime import datetime
