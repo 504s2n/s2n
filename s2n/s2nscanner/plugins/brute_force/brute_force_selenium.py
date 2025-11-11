@@ -10,21 +10,11 @@ import random
 import os
 import sys
 from webdriver_manager.chrome import ChromeDriverManager
-
-##### 모듈 임포트 #####
-
-try:
-    from .brute_force_config import (
-        DVWA_SUCCESS_INDICATORS, DVWA_FAILURE_INDICATORS,
-        GENERIC_SUCCESS_INDICATORS, GENERIC_FAILURE_INDICATORS,
-        USER_FIELD_NAME, PASS_FIELD_NAME, LOGIN_BUTTON_NAME, USERNAME_LIST
-    )
-except ImportError:
-    from brute_force_config import (
-        DVWA_SUCCESS_INDICATORS, DVWA_FAILURE_INDICATORS,
-        GENERIC_SUCCESS_INDICATORS, GENERIC_FAILURE_INDICATORS,
-        USER_FIELD_NAME, PASS_FIELD_NAME, LOGIN_BUTTON_NAME, USERNAME_LIST
-    )
+from .brute_force_config import (
+    DVWA_SUCCESS_INDICATORS, DVWA_FAILURE_INDICATORS,
+    GENERIC_SUCCESS_INDICATORS, GENERIC_FAILURE_INDICATORS,
+    USER_FIELD_NAME, PASS_FIELD_NAME, LOGIN_BUTTON_NAME, USERNAME_LIST
+)
 
 
 def setup_driver():

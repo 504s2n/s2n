@@ -33,7 +33,7 @@ class ScanReport:
             else 0.0
         )
         return (
-            f"Scan completed: {len(self.finding)} findings "
+            f"Scan completed: {len(self.findings)} findings "
             f"across {len(self.targets)} targets "
             f"in {duration:.2f}s"
         )
@@ -63,7 +63,7 @@ class Scanner:
         self.on_finding = on_finding
 
         self._discovered_plugins: List[Any] = []
-        self.logger.debug("Scanner Initialized (plugins = %d)", len(self.plugins))
+        self.logger.debug("Scanner Initialized (plugins = %d)", len(self.plugins or []))
 
     # (2) discover_plugins - 플러그인 로드
     def discover_plugins(self) -> List[Any]:
@@ -74,7 +74,7 @@ class Scanner:
         
         self.logger.info("Discovering plugins dynamically...")
         try:
-            package = "s2n.core.s2nscanner.plugins"
+            package = "s2n.s2nscanner.plugins"
             pkg = importlib.import_module(package)
             for _, modname, _ in pkgutil.iter_modules(pkg.__path__):
                 module = importlib.import_module(f"{package}.{modname}")
@@ -82,9 +82,9 @@ class Scanner:
                     try:
                         inst = module.Plugin()
                         self._discovered_plugins.append(inst)
-                        self.logger.debug("Plugin loadad: %s", modname)    
+                        self.logger.debug("Plugin loaded: %s", modname)    
                     except Exception:
-                        self.logger.exception(f"Failed to instantiate plugin %s", modname)
+                        self.logger.exception("Failed to instantiate plugin %s", modname)
         except Exception as e:
             self.logger.exception("Plugin discovery failed.: %s", e)
     
@@ -124,7 +124,7 @@ class Scanner:
         return Severity.MEDIUM
 
     # 플러그인이 반환한 dict를 Finding 인스턴스로 안전히 변환
-    def _dict_to_finding(self, plugin_name: str, d: Dict[str, Any], default_url: str) -> Finding:
+    def _dict_to_finding(self, plugin_name: str, d: Dict[str, Any], default_url: str, uuid) -> Finding:
         fid = d.get("id") or str(uuid.uuid4())
         severity = self._normalize_severity(d.get("severity", Severity.MEDIUM))
         title = d.get("title", "Unnamed finding")
@@ -188,9 +188,9 @@ class Scanner:
                         except Exception:
                             self.logger.exception("on_finding callback raised an exception.")
 
-                self.logger.info("PLugin %s: %d findings", plugin_name, len([x for x in plugin_results if x]))
+                self.logger.info("Plugin %s: %d findings", plugin_name, len([x for x in plugin_results if x]))
             except Exception as e:
-                self.logger.exception("Plugin %s faild during scan: %s", plugin_name, e)
+                self.logger.exception("Plugin %s failed during scan: %s", plugin_name, e)
                 continue
             finally:
                 if hasattr(plugin, "teardown"):

