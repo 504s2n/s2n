@@ -105,14 +105,14 @@ def scan(url, plugin, auth, username, password, output, verbose, log_file):
     except Exception as e:
         
     # verbose 모드: 콘솔 상세 출력
-    if verbose and config.output_config.format != OutputFormat.CONSOLE:
-        console_output = format_report_to_console(
-            report, mode=config.output_config.console_mode
-        )
-        click.echo("\n===== Scan Summary =====")
-        for line in console_output.summary_lines:
-            click.echo(line)
-        click.echo("========================\n")
+        if verbose and config.output_config.format != OutputFormat.CONSOLE:
+            console_output = format_report_to_console(
+                report, mode=config.output_config.console_mode
+            )
+            click.echo("\n===== Scan Summary =====")
+            for line in console_output.summary_lines:
+                click.echo(line)
+            click.echo("========================\n")
 
 
 
