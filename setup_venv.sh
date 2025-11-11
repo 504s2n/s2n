@@ -29,8 +29,8 @@ if [[ -n "$PY_VERSION" ]]; then
     echo "⬇️  Installing Python $PY_VERSION via pyenv..."
     pyenv install -s "$PY_VERSION"
   fi
-  # 해당 버전의 python 해석기 경로 지정
-  PY_BIN="$(PYENV_VERSION="$PY_VERSION" pyenv which python)"
+  export PYENV_VERSION="$PY_VERSION"
+  PY_BIN="$(pyenv which python)"
 else
   # 버전 미지정 시, pyenv 우선 사용 후 시스템 파이썬으로 폴백
   PY_BIN="$(pyenv which python 2>/dev/null || command -v python3 || command -v python)"

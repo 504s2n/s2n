@@ -1,5 +1,11 @@
 {
     "python.defaultInterpreterPath": "${workspaceFolder}/.envs/python/.venv/bin/python",
-    "python.useEnvironmentsExtension": true,
-    "python.analysis.supportAllPythonDocuments": true
+    "python.analysis.supportAllPythonDocuments": true,
+    "python.envFile": "${workspaceFolder}/.envs/python/.env",
+    "python-envs.pythonProjects": [],
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": true,
+    "python-env.workspaceSearchPaths": [
+        ".envs/python/.venv"
+    ]
 }
