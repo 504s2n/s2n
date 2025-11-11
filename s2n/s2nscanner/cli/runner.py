@@ -10,6 +10,8 @@ from s2n.s2nscanner.cli.mapper import cliargs_to_scanrequest
 from s2n.s2nscanner.cli.config_builder import build_scan_config
 from s2n.s2nscanner.auth.dvwa_adapter import DVWAAdapter
 from s2n.s2nscanner.scan_engine import Scanner
+from s2n.s2nscanner.report import output_report, OutputFormat
+from s2n.s2nscanner.finding import format_report_to_console
 
 # logger 초기화
 def init_logger(verbose: bool, log_file: str | None) -> logging.Logger:
@@ -96,27 +98,22 @@ def scan(url, plugin, auth, username, password, output, verbose, log_file):
     scanner = Scanner(config=config, scan_context=scan_ctx, auth_adapter=auth_adapter, logger=logger)
     report = scanner.scan()
 
-    ## 추후 report.py 머지 후 삭제 예정
     # 결과 출력
-    if verbose:
+    try:
+        output_report(report, config.output_config)
+        logger.info("Scan report successfully generated.")
+    except Exception as e:
+        
+    # verbose 모드: 콘솔 상세 출력
+    if verbose and config.output_config.format != OutputFormat.CONSOLE:
+        console_output = format_report_to_console(
+            report, mode=config.output_config.console_mode
+        )
         click.echo("\n===== Scan Summary =====")
-        click.echo(f"Target: {report.target_url}")
-        click.echo(f"Total Vulnerabilities: {report.summary.total_vulnerabilities}")
-        for sev, count in report.summary.severity_counts.items():
-            click.echo(f" - {sev}: {count}")
+        for line in console_output.summary_lines:
+            click.echo(line)
         click.echo("========================\n")
-    else:
-        click.echo(f"[+] Scan finished for {report.target_url}")
-        click.echo(f"→ Vulnerabilities: {report.summary.total_vulnerabilities}")
 
-    # 결과 저장
-    if output:
-        output_path = Path(output)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            from json import dump
-            dump(asdict(report), f, indent=2, ensure_ascii=False)
-        logger.info("Saved report to %s", output_path)
 
 
 if __name__ == "__main__":
