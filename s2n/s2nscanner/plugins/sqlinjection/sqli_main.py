@@ -1,161 +1,282 @@
-import requests, sys, time, requests.compat
+import logging
+import time
+from typing import List, Dict, Any, Optional
+from datetime import datetime
+import traceback
+
+# 외부 라이브러리
+import requests
 from bs4 import BeautifulSoup
+import requests.compat
 
-##### 모듈 임포트: 환경에 따라 상대/절대 경로 자동 선택 #####
 
-try:
-    from .sqli_config import TEST_PAYLOAD, TEST_PAYLOAD_TIME_BLIND, TIME_THRESHOLD
-    from .sqli_dvwa_helper import (
-        check_for_success_indicator, check_for_error_indicator,
-        extract_url_info, setup_session
-    )
-except ImportError:
-    from sqli_config import TEST_PAYLOAD, TEST_PAYLOAD_TIME_BLIND, TIME_THRESHOLD
-    from sqli_dvwa_helper import (
-        check_for_success_indicator, check_for_error_indicator,
-        extract_url_info, setup_session
-    )
+# # 패키지 실행과 직접 실행을 모두 지원하기 위한 import 처리
 
-##### 스캔 로직: GET 파라미터 #####
+# 프레임워크 인터페이스 (이미지 및 학습된 표준 반영)
+from s2n.s2nscanner.interfaces import (
+    Confidence,
+    Finding,
+    HTTPRequest,
+    PluginConfig,
+    PluginContext,
+    PluginError,
+    PluginResult,
+    PluginStatus,
+    ScanConfig,
+    ScanContext,
+    ScannerConfig,
+    Severity,
+)
 
-def scan_sql_injection_get_param(session, base_url, param):
-    vulnerabilities = []
-    success_payload = "' OR 1=1 -- "
+# HTTP 클라이언트 (별도 모듈)
+from s2n.s2nscanner.http.client import HttpClient
 
-    # 1. 성공/에러 기반 탐지
-    attack_url = f"{base_url}?{param}=1{success_payload}"
-    try:
-        response = session.get(attack_url, timeout=5)
-    except requests.exceptions.RequestException:
-        return []
+# 모듈 임포트 (상대 경로 사용)
+from .sqli_config import TEST_PAYLOAD, TEST_PAYLOAD_TIME_BLIND, TIME_THRESHOLD
+from .sqli_dvwa_helper import (
+    check_for_success_indicator, check_for_error_indicator,
+    extract_url_info
+)
 
-    success_indicator = check_for_success_indicator(response.text)
-    error_indicator = check_for_error_indicator(response.text)
+logger = logging.getLogger('s2n.plugins.sqlinjection')
 
-    if success_indicator:
-        vulnerabilities.append({"type": "SQL Injection (Data Retrieval/Boolean)", "method": "GET",
-                                "parameter": param, "details": f"성공 징후 '{success_indicator}' 발견"})
-        return vulnerabilities
+class SQLInjectionPlugin:
+    name = "sqlinjection"
+    description = "SQL Injection 취약점을 스캐너"
 
-    if error_indicator:
-        vulnerabilities.append({"type": "SQL Injection (Error Based)", "method": "GET",
-                                "parameter": param, "details": f"에러 키워드 '{error_indicator}' 발견"})
-        return vulnerabilities
+    _finding_id_counter = 0
 
-    # 2. 시간 기반 블라인드 탐지
-    attack_url_time = f"{base_url}?{param}=1{TEST_PAYLOAD_TIME_BLIND}"
-    try:
-        start_time = time.time()
-        session.get(attack_url_time, timeout=10)
-        elapsed_time = time.time() - start_time
-
-        if elapsed_time > TIME_THRESHOLD:
-            vulnerabilities.append({"type": "SQL Injection (Time Based)", "method": "GET",
-                                    "parameter": param, "details": f"응답 시간 {elapsed_time:.2f}초 초과"})
-    except (requests.exceptions.Timeout, requests.exceptions.RequestException):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         pass
 
-    return vulnerabilities
+    def _get_new_finding_id(self):
+        SQLInjectionPlugin._finding_id_counter += 1
+        return f"{self.name}-{self._finding_id_counter}"
 
-##### 스캔 로직: Form 처리 #####
+    def _create_finding(self, vul_type: str, severity: Severity, url: str, payload: Optional[str], method: str,
+                        param: str, details: str) -> Finding:
+        title_map = {
+            "SQL Injection (Data Retrieval/Boolean)": "SQL Injection (Data Exposure)",
+            "SQL Injection (Error Based)": "SQL Injection (Error Message)",
+            "SQL Injection (Time Based)": "SQL Injection (Blind)"
+        }
 
-def scan_sql_injection_forms(session, url):
-    vulnerabilities = []
-    try:
-        response = session.get(url, timeout=5)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        forms = soup.find_all('form')
-    except requests.exceptions.RequestException:
-        return []
+        # Finding 구조에 method와 parameter를 추가
+        return Finding(
+            id=self._get_new_finding_id(),
+            plugin=self.name,
+            severity=severity,
+            title=title_map.get(vul_type, "SQL Injection Detected"),
+            description=f"URL: {url}에서 {method} 요청의 파라미터 '{param}'에서 {vul_type} 징후가 발견되었습니다. 상세: {details}",
+            url=url,
+            method=method,
+            parameter=param,
+            payload=payload if payload else None,
+            evidence=details
+        )
 
-    for form in forms:
-        method = form.get('method', 'GET').upper()
-        form_url = requests.compat.urljoin(url, form.get('action', url))
-        input_fields = form.find_all(['input', 'textarea', 'select'])
-        param_names = [field.get('name') for field in input_fields if field.get('name')]
 
-        if not param_names: continue
+    # 플러그인 표준 실행 함수 (run)
+
+    def run(self, context: PluginContext) -> PluginResult:
+
+        start_dt = datetime.now()
+        findings: List[Finding] = []
+        requests_sent = 0
+
+        try:
+            target = context.scan_context.target_url
+        except AttributeError:
+            target = ""
+
+        # 1. 클라이언트 설정 (ScanContext 내부 접근)
+        try:
+            # auth_adapter는 auth_config에서 가져온다고 가정
+            auth_adapter = context.scan_context.auth_config.auth_adapter
+
+            # 인증 여부에 따라 클라이언트 획득 방식 변경
+            if auth_adapter:
+                client = auth_adapter.get_client()
+            else:
+                client = context.scan_context.http_client
+        except AttributeError as e:
+            # 필수 컨텍스트 필드 누락 오류 보고
+            return PluginResult(
+                plugin_name=self.name,
+                status=PluginStatus.FAILED,
+                error=self._create_plugin_error(f"컨텍스트 필드 접근 오류: {e}"),
+                duration_seconds=(datetime.now() - start_dt).total_seconds()
+            )
+
+        # URL 파싱
+        try:
+            base_url, get_params_from_url = extract_url_info(target)
+        except Exception as e:
+            logger.error(f"URL 파싱 오류: {e}")
+            return PluginResult(
+                plugin_name=self.name,
+                status=PluginStatus.FAILED,
+                error=self._create_plugin_error(f"URL 파싱 중 오류 발생: {e}"),
+                duration_seconds=(datetime.now() - start_dt).total_seconds()
+            )
+
+        # 2. GET 파라미터 스캔 및 폼 필드 스캔
+        get_findings, get_requests = self._scan_get_param(client, base_url, target, get_params_from_url)
+        findings.extend(get_findings)
+        requests_sent += get_requests
+
+        form_findings, form_requests = self._scan_forms(client, target)
+        findings.extend(form_findings)
+        requests_sent += form_requests
+
+        # 3. 결과 반환 (PluginResult 표준)
+        status = PluginStatus.PARTIAL if not findings else PluginStatus.SUCCESS
+
+        return PluginResult(
+            plugin_name=self.name,
+            status=status,
+            findings=findings,
+            duration_seconds=(datetime.now() - start_dt).total_seconds(),
+            requests_sent=requests_sent  # 요청 수 보고
+        )
+
+    def _create_plugin_error(self, message: str) -> PluginError:
+
+        return PluginError(
+            error_type="PluginError",
+            message=message,
+            timestamp=datetime.now(),
+            traceback=traceback.format_exc()
+        )
+
+    # 스캔 로직: GET 파라미터
+
+    def _scan_get_param(self, client: requests.Session, base_url: str, full_url: str, param_names: List[str]) -> tuple[
+        List[Finding], int]:
+
+        vulnerabilities = []
+        requests_sent = 0
+        success_payload = "' OR 1=1 -- "
 
         for param in param_names:
-            # 1. 에러 기반 탐지
-            test_data_error = {p: f"1{TEST_PAYLOAD}" if p == param else "1" for p in param_names}
+            # 1. 성공/에러 기반 탐지
+            attack_url = f"{base_url}?{param}=1{success_payload}"
             try:
-                res = session.post(form_url, data=test_data_error, timeout=5,
-                                   allow_redirects=True) if method == 'POST' else \
-                    session.get(form_url, params=test_data_error, timeout=5, allow_redirects=True)
-            except requests.exceptions.RequestException:
+                response = client.get(attack_url, timeout=5)
+                requests_sent += 1
+            except requests.exceptions.RequestException as e:
+                logger.debug(f"GET 요청 오류 ({param}): {e}")
                 continue
 
-            error_indicator = check_for_error_indicator(res.text)
+            success_indicator = check_for_success_indicator(response.text)
+            error_indicator = check_for_error_indicator(response.text)
+
+            if success_indicator:
+                vulnerabilities.append(self._create_finding(
+                    "SQL Injection (Data Retrieval/Boolean)", Severity.HIGH, full_url,
+                    success_payload, "GET", param,
+                    f"성공 징후 '{success_indicator}' 발견"
+                ))
+                continue
+
             if error_indicator:
-                vulnerabilities.append({"type": "SQL Injection (Error Based)", "method": method,
-                                        "parameter": param, "details": f"에러 키워드 '{error_indicator}' 발견"})
+                vulnerabilities.append(self._create_finding(
+                    "SQL Injection (Error Based)", Severity.HIGH, full_url,
+                    success_payload, "GET", param,
+                    f"에러 키워드 '{error_indicator}' 발견"
+                ))
                 continue
 
             # 2. 시간 기반 블라인드 탐지
-            test_data_time = {p: f"1{TEST_PAYLOAD_TIME_BLIND}" if p == param else "1" for p in param_names}
+            attack_url_time = f"{base_url}?{param}=1{TEST_PAYLOAD_TIME_BLIND}"
             try:
                 start_time = time.time()
-                (session.post(form_url, data=test_data_time, timeout=10, allow_redirects=True) if method == 'POST' else \
-                     session.get(form_url, params=test_data_time, timeout=10, allow_redirects=True))
+                client.get(attack_url_time, timeout=10)
+                requests_sent += 1
                 elapsed_time = time.time() - start_time
 
                 if elapsed_time > TIME_THRESHOLD:
-                    vulnerabilities.append({"type": "SQL Injection (Time Based)", "method": method,
-                                            "parameter": param, "details": f"응답 시간 {elapsed_time:.2f}초 초과"})
-            except (requests.exceptions.Timeout, requests.exceptions.RequestException):
+                    vulnerabilities.append(self._create_finding(
+                        "SQL Injection (Time Based)", Severity.MEDIUM, full_url,
+                        TEST_PAYLOAD_TIME_BLIND, "GET", param,
+                        f"응답 시간 {elapsed_time:.2f}초 초과"
+                    ))
+            except (requests.exceptions.Timeout, requests.exceptions.RequestException) as e:
+                logger.debug(f"GET (Time Blind) 요청 오류 ({param}): {e}")
                 pass
 
-    return vulnerabilities
+        return vulnerabilities, requests_sent
 
+    # 스캔 로직: Form 처리
 
-# =========================================================
-# 메인 실행 함수
-# =========================================================
+    def _scan_forms(self, client: requests.Session, url: str) -> tuple[List[Finding], int]:
+        vulnerabilities = []
+        requests_sent = 0
 
-def run_sql_scanner(session, full_url):
-    all_vulnerabilities = []
-    try:
-        base_url, get_params_from_url = extract_url_info(full_url)
-    except Exception:
-        return all_vulnerabilities
+        try:
+            response = client.get(url, timeout=5)
+            requests_sent += 1
+            soup = BeautifulSoup(response.text, 'html.parser')
+            forms = soup.find_all('form')
+        except requests.exceptions.RequestException as e:
+            logger.debug(f"폼 페이지 요청 오류: {e}")
+            return [], requests_sent
 
-    # DVWA 전용 로직
-    if "dvwa" in full_url.lower() and "sqli" in full_url.lower():
-        all_vulnerabilities.extend(scan_sql_injection_get_param(session, base_url, 'id'))
+        for form in forms:
+            method = form.get('method', 'GET').upper()
+            form_url = requests.compat.urljoin(url, form.get('action', url))
+            input_fields = form.find_all(['input', 'textarea', 'select'])
+            param_names = [field.get('name') for field in input_fields if field.get('name')]
 
-    # 1. GET 파라미터 스캔
-    for param in get_params_from_url:
-        all_vulnerabilities.extend(scan_sql_injection_get_param(session, base_url, param))
+            if not param_names: continue
 
-    # 2. 폼 필드 스캔
-    all_vulnerabilities.extend(scan_sql_injection_forms(session, full_url))
+            for param in param_names:
+                # 1. 에러 기반 탐지
+                test_data_error = {p: f"1{TEST_PAYLOAD}" if p == param else "1" for p in param_names}
+                req_func = client.post if method == 'POST' else client.get
 
-    return all_vulnerabilities
+                try:
+                    res = req_func(form_url,
+                                   data=test_data_error if method == 'POST' else None,
+                                   params=test_data_error if method == 'GET' else None,
+                                   timeout=5, allow_redirects=True)
+                    requests_sent += 1
+                except requests.exceptions.RequestException as e:
+                    logger.debug(f"폼 요청 오류 ({method}/{param}): {e}")
+                    continue
 
+                error_indicator = check_for_error_indicator(res.text)
+                if error_indicator:
+                    vulnerabilities.append(self._create_finding(
+                        "SQL Injection (Error Based)", Severity.HIGH, form_url,
+                        f"1{TEST_PAYLOAD}", method, param,
+                        f"에러 키워드 '{error_indicator}' 발견"
+                    ))
+                    continue
 
-def main():
-    print("--- 🛡️ GET/POST 통합 SQLi 탐지 스캐너 ---")
-    full_url = input("테스트할 전체 URL을 입력하세요 : ").strip()
+                # 2. 시간 기반 블라인드 탐지
+                test_data_time = {p: f"1{TEST_PAYLOAD_TIME_BLIND}" if p == param else "1" for p in param_names}
+                try:
+                    start_time = time.time()
+                    req_func(form_url,
+                             data=test_data_time if method == 'POST' else None,
+                             params=test_data_time if method == 'GET' else None,
+                             timeout=10, allow_redirects=True)
+                    requests_sent += 1
+                    elapsed_time = time.time() - start_time
 
-    if not full_url.startswith('http'):
-        print("[-] URL은 'http' 또는 'https'로 시작해야 합니다. 종료합니다.")
-        sys.exit(1)
+                    if elapsed_time > TIME_THRESHOLD:
+                        vulnerabilities.append(self._create_finding(
+                            "SQL Injection (Time Based)", Severity.MEDIUM, form_url,
+                            TEST_PAYLOAD_TIME_BLIND, method, param,
+                            f"응답 시간 {elapsed_time:.2f}초 초과"
+                        ))
+                except (requests.exceptions.Timeout, requests.exceptions.RequestException) as e:
+                    logger.debug(f"폼 (Time Blind) 요청 오류 ({method}/{param}): {e}")
+                    pass
 
-    session = setup_session(full_url)
-    results = run_sql_scanner(session, full_url)
+        return vulnerabilities, requests_sent
 
-    if results:
-        print(f"\n🚨🚨 **총 {len(results)}개의 SQL Injection 징후가 발견되었습니다.** 🚨🚨")
-        for i, vuln in enumerate(results, 1):
-            print(f"\n[{i}. 발견된 취약점]")
-            print(f"  - 유형: {vuln.get('type', 'N/A')}")
-            print(f"  - 방식: {vuln.get('method', 'N/A')}")
-            print(f"  - 파라미터: {vuln.get('parameter', 'N/A')}")
-            print(f"  - 상세: {vuln.get('details', 'N/A')}")
-    else:
-        print("\n🎉 취약점 징후가 발견되지 않았습니다.")
-
-
-if __name__ == '__main__':
-    main()
+# 메인 함수
+def main(config=None):
+    return SQLInjectionPlugin(config)
