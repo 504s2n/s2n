@@ -6,6 +6,7 @@ ScanReport를 다양한 형식(JSON, HTML, CSV, CONSOLE)으로 변환하고 출�
 
 import csv
 import json
+import traceback
 from dataclasses import asdict, fields
 from datetime import datetime
 from pathlib import Path
@@ -477,7 +478,7 @@ def output_report(report: ScanReport, config: OutputConfig) -> None:
     elif config.format == OutputFormat.MULTI:
         # 여러 형식으로 동시 출력
         base_path = config.path or Path("report")
-
+    try:
         # JSON
         json_path = base_path.with_suffix(".json")
         save_report(report, json_path, OutputFormat.JSON, config.pretty_print)
@@ -496,6 +497,8 @@ def output_report(report: ScanReport, config: OutputConfig) -> None:
             print(line)
         for line in console_output.detail_lines:
             print(line)
-
+    except Exception as ex:
+        traceback.print_exc()
+        print(f"[ERROR]: REPORT FAILED: {ex} (MULTI Option error)")
     else:
         raise ValueError(f"Unsupported output format: {config.format}")
