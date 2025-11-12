@@ -67,7 +67,7 @@ pytest-xdist>=3.0
 responses>=0.23.0
 ```
 
-### [>] test_fixtures.py 데이터 상수 작성 (HTML/페이로드 샘플)
+### [+] test_fixtures.py 데이터 상수 작성 (HTML/페이로드 샘플)
 - **목표:** 모든 테스트가 공유할 HTML 스텁, 페이로드, 쿠키 문자열 등을 데이터 리터럴로 보관.
 - **키 액션**
   1. `SAMPLE_PAYLOADS`, `SIMPLE_HTML`, `FORM_WITH_CSRF_HTML`, `COOKIE_HEADER`, `FINDING_SAMPLE` 등 정의.

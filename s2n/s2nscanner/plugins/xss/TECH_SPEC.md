@@ -15,8 +15,8 @@
 [+] pytest 환경 구성 (pytest.ini, requirements-test.txt, .gitignore)
     Commit ID: 807251f / Commit Message: test/xss : 1. unit test - pytest 환경 구성
 
-[>] test_fixtures.py 데이터 상수 작성 (HTML/페이로드 샘플)
-    Commit ID: ________ / Commit Message: ________________________________________
+[+] test_fixtures.py 데이터 상수 작성 (HTML/페이로드 샘플)
+    Commit ID: a7a89cf / Commit Message: test/xss : 1. unit test - fixtures 데이터 상수 작성
 
 [>] conftest.py 공통 픽스처 정의 (responses_mock, payload_path 등)
     Commit ID: ________ / Commit Message: ________________________________________
