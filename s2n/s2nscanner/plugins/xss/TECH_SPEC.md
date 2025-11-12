@@ -27,8 +27,8 @@
 [+] test_xss_unit.py - xss_scanner.py 데이터 클래스 테스트 (PayloadResult, Finding)
     Commit ID: b8f3d11 / Commit Message: test/xss : 1. unit test - xss_scanner 데이터 클래스 테스트
 
-[>] test_xss_unit.py - FormParser 클래스 테스트
-    Commit ID: ________ / Commit Message: ________________________________________
+[+] test_xss_unit.py - FormParser 클래스 테스트
+    Commit ID: d1d519e / Commit Message: test/xss : 1. unit test - FormParser 클래스 테스트
 
 [>] test_xss_unit.py - InputPointDetector 클래스 테스트
     Commit ID: ________ / Commit Message: ________________________________________

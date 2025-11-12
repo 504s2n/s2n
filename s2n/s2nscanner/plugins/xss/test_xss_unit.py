@@ -266,3 +266,114 @@ def test_form_parser_textarea_select():
     assert len(inputs) == 2
     assert any(inp["name"] == "comment" for inp in inputs)
     assert any(inp["name"] == "category" for inp in inputs)
+
+
+@pytest.mark.unit
+def test_input_point_detector_from_query(responses_mock, mock_http_client):
+    """URL 쿼리 파라미터 탐지"""
+    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+
+    responses_mock.get("https://app.test/search", body="<html></html>")
+
+    detector = InputPointDetector(mock_http_client)
+    points = detector.detect("https://app.test/search?q=test&lang=ko")
+
+    assert len(points) >= 1
+    url_point = next((p for p in points if p.source == "url"), None)
+    assert url_point is not None
+    assert url_point.parameters["q"] == "test"
+    assert url_point.parameters["lang"] == "ko"
+    assert url_point.method == "GET"
+
+
+@pytest.mark.unit
+def test_input_point_detector_from_form(responses_mock, mock_http_client):
+    """HTML form 입력 지점 탐지"""
+    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+    from test_fixtures import FORM_WITH_CSRF_HTML
+
+    responses_mock.get("https://app.test/form", body=FORM_WITH_CSRF_HTML, status=200)
+
+    detector = InputPointDetector(mock_http_client)
+    points = detector.detect("https://app.test/form")
+
+    form_point = next((p for p in points if p.source == "form"), None)
+    assert form_point is not None
+    assert form_point.method == "POST"
+    assert "csrf_token" in form_point.parameters
+    assert form_point.parameters["csrf_token"] == "abc123"
+    assert "comment" in form_point.parameters
+
+
+@pytest.mark.unit
+def test_input_point_detector_hidden_field_preserved(responses_mock, mock_http_client):
+    """hidden 필드도 parameters에 포함"""
+    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+
+    html = '''
+    <form method="POST">
+        <input type="hidden" name="token" value="secret123">
+        <input type="text" name="query">
+    </form>
+    '''
+    responses_mock.get("https://test.com/", body=html, status=200)
+
+    detector = InputPointDetector(mock_http_client)
+    points = detector.detect("https://test.com/")
+
+    form_point = points[0]
+    assert form_point.parameters["token"] == "secret123"
+    assert form_point.parameters["query"] == "test"  # 기본값
+
+
+@pytest.mark.unit
+def test_input_point_detector_http_error(responses_mock, mock_http_client, caplog):
+    """HTTP 오류 시 graceful 처리"""
+    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+
+    responses_mock.get("https://test.com/error", status=500)
+
+    detector = InputPointDetector(mock_http_client)
+    points = detector.detect("https://test.com/error?q=1")
+
+    # URL 파라미터는 탐지되지만 form은 실패
+    assert len(points) >= 1
+    assert "Failed to detect input points" in caplog.text or len(points) == 1
+
+
+@pytest.mark.unit
+def test_input_point_detector_submit_button_handling(responses_mock, mock_http_client):
+    """submit/button 타입 필드 처리"""
+    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+
+    html = '''
+    <form>
+        <input type="text" name="username">
+        <input type="submit" name="btnSubmit" value="Login">
+        <input type="button" name="btnCancel" value="Cancel">
+    </form>
+    '''
+    responses_mock.get("https://test.com/", body=html, status=200)
+
+    detector = InputPointDetector(mock_http_client)
+    points = detector.detect("https://test.com/")
+
+    form_point = points[0]
+    # submit/button은 value 또는 name을 기본값으로 사용
+    assert form_point.parameters["btnSubmit"] == "Login"
+    assert form_point.parameters["btnCancel"] == "Cancel"
+
+
+@pytest.mark.unit
+def test_input_point_detector_action_url_join(responses_mock, mock_http_client):
+    """form action의 상대 경로 처리"""
+    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+
+    html = '<form action="/submit"><input name="data"></form>'
+    responses_mock.get("https://test.com/page", body=html, status=200)
+
+    detector = InputPointDetector(mock_http_client)
+    points = detector.detect("https://test.com/page")
+
+    form_point = points[0]
+    assert form_point.url == "https://test.com/submit"

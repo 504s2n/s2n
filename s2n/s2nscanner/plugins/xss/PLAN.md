@@ -552,7 +552,7 @@ def test_update_tokens_no_match():
     assert params == {}
 ```
 
-### [>] test_xss_unit.py - FormParser 클래스 테스트
+### [+] test_xss_unit.py - FormParser 클래스 테스트
 - **목표:** 다양한 form/input 조합을 파싱하고, action/method/inputs 추출 확인.
 - **키 액션**
   1. 기본 GET form, POST form with csrf field, inputs without name 제외 케이스.
