@@ -65,6 +65,7 @@ COMMON_PARAMS: Sequence[str] = [
 ]
 
 class OSCommandPlugin:
+    """Detects OS command injection by crawling targets and replaying payloads."""
     name = "oscommand"
     description = "Detects OS Command Injection vulnerabilities"
 
@@ -78,6 +79,7 @@ class OSCommandPlugin:
 
     # New plugin API (PluginContext -> PluginResult)
     def run(self, plugin_context: PluginContext) -> PluginResult:
+        """Execute the plugin using the modern PluginContext → PluginResult API."""
         start_time = datetime.utcnow()
         findings: List[Finding] = []
         requests_sent = 0
@@ -107,7 +109,7 @@ class OSCommandPlugin:
                 requests_sent=requests_sent,
             )
         except Exception as exc:  # pylint: disable=broad-except
-            logger.exception("OSCommand plugin failed: {0}", exc)
+            logger.exception("OSCommand plugin failed: %s", exc)
             end_time = datetime.utcnow()
             return PluginResult(
                 plugin_name=self.name,
@@ -125,7 +127,7 @@ class OSCommandPlugin:
 
     # Legacy API (initialize/scan/teardown) for backward compatibility
     def initialize(self, cfg=None, http: Optional[HttpClient] = None):
-        """Scanner 엔진의 기존 initialize 시그니처 유지."""
+        """Maintain compatibility with the legacy initialize signature."""
         self.http = http or HttpClient()
         if isinstance(cfg, dict):
             self.depth = int(cfg.get("depth", self.depth))
@@ -133,14 +135,13 @@ class OSCommandPlugin:
         logger.info("OSCommand Plugin initialized (depth=%d, timeout=%d)", self.depth, self.timeout)
 
     def scan(self, base_url: str, http: Optional[HttpClient] = None) -> List[Finding]:
-        """
-        기존 Scanner.run_target 경로와의 호환을 위해 Findings 리스트를 반환합니다.
-        """
+        """Legacy entry point that returns a plain Finding list for a base URL."""
         client = http or self.http or HttpClient()
         findings, _, _ = self._scan_urls(client=client, base_url=base_url, depth=self.depth)
         return findings
 
     def teardown(self):
+        """Release any per-run resources held by the plugin."""
         logger.debug("OSCommand Plugin teardown complete.")
 
     # Internal helpers
@@ -262,4 +263,5 @@ class OSCommandPlugin:
         return findings, requests_sent
 
 def main(config: Optional[Dict[str, object]] = None) -> OSCommandPlugin:
+    """Factory exported via __all__ so the scanner can instantiate the plugin."""
     return OSCommandPlugin(config)
