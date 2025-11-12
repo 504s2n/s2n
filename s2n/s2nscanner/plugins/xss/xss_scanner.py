@@ -5,13 +5,71 @@ import json
 import time
 import re
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
+
+if __package__ is None or __package__ == "":
+    import sys as _sys
+
+    APP_DIR = Path(__file__).resolve().parent
+    ROOT_DIR = APP_DIR.parent.parent.parent
+    for _path in (APP_DIR, ROOT_DIR):
+        if str(_path) not in _sys.path:
+            _sys.path.append(str(_path))
+
+try:
+    # 프로젝트에 정의된 공통 타입들이 있으면 사용
+    from s2n.interfaces import (
+        PluginContext,
+        ScanContext,
+        PluginConfig,
+        Finding as S2NFinding,
+        PluginResult,
+        PluginStatus,
+        Severity,
+        Confidence,
+        PluginError,
+    )
+except Exception:
+    # 없을 경우에도 동작하도록 경량 대체 클래스 정의 (호환 목적)
+    from types import SimpleNamespace
+
+    class PluginContext(SimpleNamespace):
+        pass
+
+    class ScanContext(SimpleNamespace):
+        pass
+
+    class PluginConfig(SimpleNamespace):
+        pass
+
+    class PluginResult(SimpleNamespace):
+        pass
+
+    class PluginStatus:
+        SUCCESS = "success"
+        FAILED = "failed"
+        SKIPPED = "skipped"
+        PARTIAL = "partial"
+
+    class Severity:
+        HIGH = "HIGH"
+
+    class Confidence:
+        FIRM = "firm"
+
+    class PluginError(SimpleNamespace):
+        pass
+
+    class S2NFinding(SimpleNamespace):
+        pass
 
 # 전용 로거 (CLI에서 핸들러/레벨을 설정)
 logger = logging.getLogger("s2n_xss")
@@ -19,9 +77,10 @@ logger = logging.getLogger("s2n_xss")
 # CSRF 토큰, nonce 등을 탐지하기 위한 키워드 목록
 TOKEN_KEYWORDS = ("token", "csrf", "nonce")
 # 요청 타임아웃 설정 (초)
-DEFAULT_TIMEOUT = 10
+# 기존 DEFAULT_TIMEOUT(10초)을 5초로 단축
+DEFAULT_TIMEOUT = 5
 # User-Agent 헤더 값 설정
-USER_AGENT = "s2n_xss/2.3 (Reflected Scanner)"
+USER_AGENT = "s2n_xss/0.1.0 (Reflected Scanner)"
 # 토큰 패턴 정규식 템플릿, HTML input 태그에서 특정 키워드가 포함된 name 속성과 value 값을 추출
 TOKEN_PATTERN_TEMPLATE = (
     r'name=["\']([^"\']*{keyword}[^"\']*)["\']\s+value=["\']([^"\']+)["\']'
@@ -30,7 +89,13 @@ TOKEN_PATTERN_TEMPLATE = (
 
 @dataclass
 class PayloadResult:
-    # 페이로드 테스트 결과를 저장하는 데이터 클래스
+    """
+    페이로드 테스트 결과를 표현하는 데이터 클래스.
+    - payload: 실제 삽입한 문자열
+    - context: 반영된 컨텍스트(html/attribute/mixed/stored 등)
+    - category: 취약점 유형 구분(reflected/stored)
+    - description: 추가 설명 및 진단 근거
+    """
     payload: str  # 테스트한 페이로드 문자열
     context: str  # 페이로드가 반영된 컨텍스트 (html, attribute 등)
     category: str  # 취약점 유형 (reflected, stored)
@@ -40,7 +105,10 @@ class PayloadResult:
 
 @dataclass
 class Finding:
-    # 취약점 발견 정보를 저장하는 데이터 클래스
+    """
+    특정 URL/파라미터 조합에서 발견된 취약점 정보를 수집한다.
+    matches 리스트에 PayloadResult를 계속 추가하여 한 파라미터가 여러 페이로드에 취약할 때도 한눈에 볼 수 있다.
+    """
     url: str  # 취약점이 발견된 URL
     parameter: str  # 취약점이 발견된 파라미터 이름
     method: str  # HTTP 메서드 (GET, POST)
@@ -57,10 +125,27 @@ class Finding:
             "successful_payloads": [match.__dict__ for match in self.matches],
         }
 
+    def as_s2n_finding(self):
+        """
+        변환 헬퍼: S2N 문서 기반 Finding 형태로 변환(간이)
+        """
+        return {
+            "url": self.url,
+            "parameter": self.parameter,
+            "method": self.method,
+            "successful_payloads": [match.__dict__ for match in self.matches],
+        }
+
 
 @dataclass
 class InputPoint:
-    # 입력 가능한 지점(URL 파라미터, 폼 입력 필드) 정보를 저장하는 데이터 클래스
+    """
+    URL 또는 HTML form으로부터 추출한 사용자 입력 지점을 표현한다.
+    - url: 요청이 전송될 엔드포인트 (action 없이 form이면 현재 URL)
+    - method: GET/POST
+    - parameters: 기본값/토큰이 들어있는 파라미터 dict
+    - source: 어디서 발견했는지(url/form/manual)를 기록해 디버깅에 활용
+    """
     url: str  # 입력 지점 URL
     method: str  # HTTP 메서드
     parameters: Dict[str, str]  # 파라미터 이름과 기본값 딕셔너리
@@ -68,7 +153,12 @@ class InputPoint:
 
 
 class FormParser(HTMLParser):
-    """Extract forms and their input fields."""
+    """
+    HTML form과 내부 input 요소를 추출하기 위한 전용 파서.
+    - form 시작 태그에서 action/method 초기화
+    - input/textarea/select 요소를 순서대로 기록
+    - 종료 태그(form) 시점에 지금까지 수집한 정보를 forms 리스트에 저장한다.
+    """
 
     # HTML 파싱을 통해 form 태그와 그 내부의 input, textarea, select 필드를 추출하는 클래스
 
@@ -115,14 +205,24 @@ class FormParser(HTMLParser):
 
 
 class InputPointDetector:
-    """Locate URL parameters and HTML form inputs."""
+    """
+    URL 파라미터 및 HTML form 입력 필드를 동시에 탐지하는 도우미.
+    - requests.Session 혹은 HttpClient 호환 객체를 받아 재사용한다.
+    """
 
     # URL 쿼리 파라미터 및 HTML 폼 입력 필드를 탐지하여 입력 지점 리스트를 반환하는 클래스
 
-    def __init__(self, session: requests.Session):
-        self.session = session  # requests 세션 객체
+    def __init__(self, transport: Any):
+        """HttpClient/Session 객체를 받아 재사용한다."""
+        self.transport = transport  # HttpClient 또는 requests.Session
 
     def detect(self, url: str) -> List[InputPoint]:
+        """
+        주어진 URL에서 사용자 입력이 가능한 포인트를 수집한다.
+        1. URL 쿼리 파라미터를 파싱해 기본 GET 입력 포인트로 추가
+        2. 실제 페이지를 요청해 form/input을 HTMLParser로 분석하여 action/method/필드 목록을 구성
+        3. 토큰(hide) 필드도 그대로 parameters에 넣어 이후 요청 시 누락되지 않게 한다
+        """
         # 입력 가능한 지점들을 탐지하는 메서드
         points: List[InputPoint] = []
 
@@ -146,7 +246,7 @@ class InputPointDetector:
 
         try:
             # 실제 페이지 요청 후 HTML 폼을 파싱하여 입력 필드 탐지
-            response = self.session.get(url, timeout=DEFAULT_TIMEOUT)
+            response = self.transport.get(url, timeout=DEFAULT_TIMEOUT)
             if response.status_code == 200:
                 parser = FormParser()
                 parser.feed(response.text)
@@ -205,6 +305,11 @@ class InputPointDetector:
 
 
 def update_tokens_from_html(html_content: str, params: Dict[str, str]) -> None:
+    """
+    응답 HTML에서 CSRF token/nonce 등 보호 필드를 찾아 params dict를 갱신한다.
+    - TOKEN_KEYWORDS 를 포함한 input name / value를 정규식으로 찾고
+    - 이 값을 params에 대입해 다음 요청 시 동일 토큰으로 재사용한다.
+    """
     # HTML 내용에서 CSRF 토큰 등 보안 토큰을 찾아 파라미터 딕셔너리에 업데이트
     for keyword in TOKEN_KEYWORDS:
         pattern = re.compile(TOKEN_PATTERN_TEMPLATE.format(keyword=keyword))
@@ -214,14 +319,20 @@ def update_tokens_from_html(html_content: str, params: Dict[str, str]) -> None:
 
 
 def refresh_tokens(
-    session: requests.Session, url: str, params: Dict[str, str], method: str
+    transport: Any, url: str, params: Dict[str, str], method: str
 ) -> None:
+    """
+    추가 HTTP 요청을 수행해 토큰 값을 최신 상태로 맞춘다.
+    - GET 요청: params를 그대로 붙여 요청
+    - POST 요청: data에 params를 실어 보냄
+    - 응답 본문을 update_tokens_from_html() 에 전달하여 hidden field 변동에 대응한다.
+    """
     # 요청을 보내고 응답에서 토큰 정보를 갱신하는 함수
     try:
         if method.upper() == "GET":
-            response = session.get(url, params=params, timeout=DEFAULT_TIMEOUT)
+            response = transport.get(url, params=params, timeout=DEFAULT_TIMEOUT)
         else:
-            response = session.get(url, timeout=DEFAULT_TIMEOUT)
+            response = transport.post(url, data=params, timeout=DEFAULT_TIMEOUT)
         response.encoding = response.apparent_encoding
         update_tokens_from_html(response.text, params)
     except Exception as exc:
@@ -229,6 +340,11 @@ def refresh_tokens(
 
 
 def extract_payloads(payloads_json: Dict) -> List[str]:
+    """
+    페이로드 JSON 구조 내 모든 문자열을 재귀적으로 모아서 1차원 리스트로 만든다.
+    - payloads / filter_bypass / korean_encoding_specific 등 섹션을 전부 순회
+    - 값이 문자열인 경우만 리스트에 추가하여 이후 반복문에서 바로 사용할 수 있도록 한다.
+    """
     # JSON 구조에서 페이로드 문자열들을 재귀적으로 수집하는 함수
     collected: List[str] = []
 
@@ -252,14 +368,35 @@ def extract_payloads(payloads_json: Dict) -> List[str]:
 
 
 class ReflectedScanner:
-    # 반사형 및 저장형 XSS 취약점 탐지기 클래스
+    """
+    반사형 및 저장형 XSS 취약점을 탐지하는 핵심 엔진.
+    - payload 파일을 읽어 테스트 목록을 구성하고 InputPointDetector로 입력 지점을 찾는다.
+    - 외부에서 주입된 HttpClient만 사용해 session guide의 “공용 세션” 규약을 지킨다.
+    - run()은 PluginContext를 입력 받아 interfaces.PluginResult/Finding을 반환해
+      interfaces.py에서 정의한 단계(PluginContext → Finding → PluginResult)를 그대로 따른다.
+    """
 
-    def __init__(self, payloads_path: Path, cookies: Optional[Dict[str, str]] = None):
+    def __init__(
+        self,
+        payloads_path: Path,
+        http_client: Any,
+        cookies: Optional[Dict[str, str]] = None,
+    ):
         # 초기화: 페이로드 로드, 세션 설정, 입력 지점 탐지기 생성
-        self.session = requests.Session()
-        self.session.headers.update({"User-Agent": USER_AGENT})
-        if cookies:
-            self.session.cookies.update(cookies)
+        if http_client is None:
+            raise ValueError("ReflectedScanner requires an injected HttpClient/transport.")
+        self.transport = http_client
+
+        self.session = getattr(self.transport, "s", None)
+        if self.session is None and isinstance(self.transport, requests.Session):
+            self.session = self.transport
+
+        if self.session is not None:
+            self.session.headers.update({"User-Agent": USER_AGENT})
+            if cookies:
+                self.session.cookies.update(cookies)
+        elif cookies:
+            logger.warning("Unable to inject cookies — no session object available.")
 
         # 페이로드 JSON 파일 로드
         with payloads_path.open("r", encoding="utf-8") as fp:
@@ -267,10 +404,171 @@ class ReflectedScanner:
 
         # 페이로드 리스트 추출
         self.payloads: List[str] = extract_payloads(payloads_json)
-        self.detector = InputPointDetector(self.session)
+        self.detector = InputPointDetector(self.transport)
         self.findings: Dict[str, Finding] = {}
+        # 통계
+        self._requests_sent = 0
+        self._urls_scanned = 0
+
+    # ---------------------------------------------------------------------
+    # New API: run(plugin_context) -> PluginResult
+    # This method follows the S2N common-types pattern: it expects a PluginContext
+    # that contains scan_context (with http_client) and plugin_config.
+    # It will reuse an injected http_client when available (to preserve login/session).
+    # ---------------------------------------------------------------------
+    def run(self, context: PluginContext) -> PluginResult:
+        """
+        PluginContext 기반으로 XSS 스캔을 수행해 PluginResult를 만든다.
+        - interfaces.PluginContext → PluginResult 흐름(session guide)과 동일하게,
+          scan_context/http_client/target_urls를 읽어 입력 포인트 탐지 → 페이로드 주입을 수행한다.
+        - 성공 페이로드는 내부 Finding map에 누적 후 interfaces.Finding dataclass로 변환한다.
+        - 예외 발생 시 PluginError를 기록해 PluginResult.error로 전달한다.
+        """
+        start_dt = datetime.now(timezone.utc)
+        self.findings.clear()
+        self._requests_sent = 0
+        self._urls_scanned = 0
+
+        # Prefer http_client from provided scan_context to preserve session/cookies.
+        http_client = getattr(getattr(context, "scan_context", None), "http_client", None)
+        if http_client is None:
+            http_client = self.transport
+
+        # PluginConfig 미설정 시 기본값을 덮어씁니다 (max_payloads=50, timeout=5)
+        plugin_cfg = getattr(context, "plugin_config", None) or PluginConfig(
+            enabled=True,
+            timeout=5,
+            max_payloads=50,
+            custom_params={},
+        )
+        max_payloads = getattr(plugin_cfg, "max_payloads", 50)
+        timeout = getattr(plugin_cfg, "timeout", 5)
+
+        target_urls = list(getattr(context, "target_urls", None) or [])
+        if not target_urls:
+            scan_cfg = getattr(getattr(context, "scan_context", None), "config", None)
+            if scan_cfg and getattr(scan_cfg, "target_url", None):
+                target_urls.append(scan_cfg.target_url)
+
+        status = getattr(PluginStatus, "SUCCESS", "success")
+        plugin_error = None
+
+        if not target_urls:
+            status = getattr(PluginStatus, "SKIPPED", "skipped")
+        else:
+            try:
+                for point_url in target_urls:
+                    self._urls_scanned += 1
+                    points = []
+                    # reuse detector logic but with provided http_client
+                    detector = InputPointDetector(http_client)
+                    points = detector.detect(point_url)
+
+                    # 입력 포인트별 최초 1회만 토큰을 갱신해 토큰 보호를 강화
+                    for p in points:
+                        try:
+                            refresh_tokens(http_client, p.url, p.parameters, p.method)
+                        except Exception as exc:
+                            logger.warning("[TOKEN] Failed initial token refresh: %s", exc)
+
+                    if not points:
+                        # if no input points found, create a default inputpoint for url itself
+                        parsed = urlparse(point_url)
+                        points = [
+                            InputPoint(
+                                url=point_url.split("?")[0],
+                                method="GET",
+                                parameters=parse_qs(parsed.query) or {},
+                                source="url",
+                            )
+                        ]
+
+                    for point in points:
+                        for param_name in list(point.parameters.keys()):
+                            lower = param_name.lower()
+                            if any(k in lower for k in TOKEN_KEYWORDS):
+                                continue
+
+                            payloads = self.payloads
+                            if max_payloads:
+                                payloads = payloads[: max_payloads]
+
+                            for payload in payloads:
+                                try:
+                                    self._requests_sent += 1
+                                    # honor timeout from plugin config
+                                    if point.method.upper() == "POST":
+                                        response = http_client.post(
+                                            point.url,
+                                            data={**point.parameters, param_name: payload},
+                                            timeout=timeout,
+                                        )
+                                    else:
+                                        response = http_client.get(
+                                            point.url,
+                                            params={**point.parameters, param_name: payload},
+                                            timeout=timeout,
+                                        )
+                                    response.encoding = response.apparent_encoding
+                                    body = response.text
+
+                                    # token refresh attempt
+                                    update_tokens_from_html(body, point.parameters)
+
+                                    if payload in body:
+                                        pr = PayloadResult(
+                                            payload=payload,
+                                            context=self._detect_context(body, payload),
+                                            category="reflected",
+                                            category_ko="반사형",
+                                            description="Payload echoed without encoding",
+                                        )
+                                        self._record(point, param_name, pr)
+                                except Exception as exc:
+                                    logger.debug(
+                                        "Request error for %s %s: %s",
+                                        point.url,
+                                        param_name,
+                                        exc,
+                                    )
+                                    continue
+            except Exception as exc:  # noqa: BLE001
+                status = getattr(PluginStatus, "FAILED", "failed")
+                plugin_error = PluginError(
+                    error_type=type(exc).__name__,
+                    message=str(exc),
+                    traceback=None,
+                    context={"target_urls": target_urls},
+                )
+                logger.exception("XSS scanner error: %s", exc)
+
+        end_dt = datetime.now(timezone.utc)
+        s2n_findings = self._as_s2n_findings()
+        metadata = {"payloads_tried": len(self.payloads)}
+        if status == getattr(PluginStatus, "SUCCESS", "success") and not s2n_findings:
+            metadata["note"] = "No reflected/stored XSS detected"
+
+        plugin_result = PluginResult(
+            plugin_name=getattr(context, "plugin_name", "xss"),
+            status=status,
+            findings=s2n_findings,
+            start_time=start_dt,
+            end_time=end_dt,
+            duration_seconds=(end_dt - start_dt).total_seconds(),
+            urls_scanned=self._urls_scanned,
+            requests_sent=self._requests_sent,
+            error=plugin_error,
+            metadata=metadata,
+        )
+        return plugin_result
 
     def _test_stored(self, point: InputPoint) -> Optional[PayloadResult]:
+        """
+        저장형 XSS 여부를 단일 InputPoint 기준으로 검사한다.
+        - hidden/token 필드와 버튼 필드는 건드리지 않고 다른 필드 전체에 스토어드 페이로드 삽입
+        - 제출 후 토큰을 갱신하고 잠시 대기
+        - 동일 URL을 다시 요청해 페이로드가 반영됐는지 확인하여 PayloadResult를 반환
+        """
         # 저장형 XSS 테스트 함수
         params = point.parameters.copy()
         unique_tag = (
@@ -278,8 +576,7 @@ class ReflectedScanner:
         )
         payload = f"<script>alert('{unique_tag}')</script>"  # 저장형 페이로드
 
-        # 토큰 갱신
-        refresh_tokens(self.session, point.url, params, point.method)
+        # Token 강화 모드: 매 페이로드 refresh 제거 (detect 시 최초 1회만)
 
         updated = False
         for name in list(params.keys()):
@@ -300,11 +597,11 @@ class ReflectedScanner:
         try:
             # 저장형 페이로드 전송 (POST/GET)
             if point.method.upper() == "POST":
-                response = self.session.post(
+                response = self.transport.post(
                     point.url, data=params, timeout=DEFAULT_TIMEOUT
                 )
             else:
-                response = self.session.get(
+                response = self.transport.get(
                     point.url, params=params, timeout=DEFAULT_TIMEOUT
                 )
             response.encoding = response.apparent_encoding
@@ -319,7 +616,7 @@ class ReflectedScanner:
 
         try:
             # 저장된 페이로드가 반영되었는지 확인하기 위해 다시 요청
-            verify = self.session.get(point.url, timeout=DEFAULT_TIMEOUT)
+            verify = self.transport.get(point.url, timeout=DEFAULT_TIMEOUT)
             verify.encoding = verify.apparent_encoding
             body = verify.text
             escaped = html.escape(payload)
@@ -343,21 +640,25 @@ class ReflectedScanner:
     def _test_payload(
         self, point: InputPoint, param_name: str, payload: str
     ) -> Optional[PayloadResult]:
+        """
+        반사형 XSS를 위해 단일 파라미터에 페이로드를 주입한다.
+        - point.parameters를 복사해 해당 param_name만 payload로 교체
+        - transport 요청 이후 응답 본문에서 payload 문자열이 그대로 나타나는지 검사
+        - 컨텍스트(HTML/attribute/mixed)를 추론하여 PayloadResult에 포함한다.
+        """
         # 반사형 XSS 테스트 함수
         params = point.parameters.copy()
         params[param_name] = payload  # 테스트할 파라미터에 페이로드 삽입
 
-        # 토큰 갱신
-        refresh_tokens(self.session, point.url, params, point.method)
-
+        # Token 강화 모드: detect 단계에서만 토큰을 갱신하므로 여기서는 추가 호출을 생략
         try:
             # 요청 전송 (POST/GET)
             if point.method.upper() == "POST":
-                response = self.session.post(
+                response = self.transport.post(
                     point.url, data=params, timeout=DEFAULT_TIMEOUT
                 )
             else:
-                response = self.session.get(
+                response = self.transport.get(
                     point.url, params=params, timeout=DEFAULT_TIMEOUT
                 )
 
@@ -406,6 +707,10 @@ class ReflectedScanner:
     def _record(
         self, point: InputPoint, param_name: str, result: PayloadResult
     ) -> None:
+        """
+        성공한 페이로드를 포인트+파라미터 기준으로 누적한다.
+        - 동일 URL/파라미터/메서드 조합은 하나의 Finding으로 묶어 matches 리스트를 채운다.
+        """
         # 반사형 취약점 결과를 findings 딕셔너리에 기록
         key = f"{point.url}|{param_name}|{point.method}"
         finding = self.findings.get(key)
@@ -415,6 +720,7 @@ class ReflectedScanner:
         finding.matches.append(result)
 
     def _record_stored(self, point: InputPoint, result: PayloadResult) -> None:
+        """저장형 결과를 별도의 key([stored])로 기록해 혼동을 막는다."""
         # 저장형 취약점 결과를 findings 딕셔너리에 기록
         key = f"{point.url}|[stored]|{point.method}"
         finding = self.findings.get(key)
@@ -423,95 +729,40 @@ class ReflectedScanner:
             self.findings[key] = finding
         finding.matches.append(result)
 
-    def scan(
-        self,
-        target_url: str,
-        params: Optional[Dict[str, str]] = None,
-        method: str = "GET",
-    ) -> List[Dict]:
-        # 실제 스캔 수행 함수
-        points: List[InputPoint]
-        logger.info(
-            "[SCAN] Starting scan for %s (payloads=%d)",
-            target_url,
-            len(self.payloads),
-        )
-
-        if params is not None:
-            # 수동으로 파라미터가 주어진 경우 입력 지점 리스트에 추가
-            points = [
-                InputPoint(
-                    url=target_url.split("?")[0],
-                    method=method,
-                    parameters=params or {},
-                    source="manual",
-                )
-            ]
-        else:
-            # 자동으로 URL 및 폼 입력 지점 탐지
-            points = self.detector.detect(target_url)
-
-        for idx, point in enumerate(points, 1):
-            field_names = list(point.parameters.keys())
-            logger.info(
-                "[SCAN] Testing input point #%d (method=%s, fields=%d)",
-                idx,
-                point.method,
-                len(field_names),
+    def _as_s2n_findings(self) -> List[S2NFinding]:
+        """
+        내부 Finding dict를 s2n.interfaces.Finding 리스트로 변환한다.
+        - matches 통계를 요약해 description과 evidence를 구성
+        - severity/confidence는 기본값(HIGH/FIRM)으로 설정하되 필요 시 조정 가능
+        """
+        results: List[S2NFinding] = []
+        severity_high = getattr(Severity, "HIGH", "HIGH")
+        confidence_val = getattr(Confidence, "FIRM", "FIRM")
+        for idx, finding in enumerate(self.findings.values(), start=1):
+            first_match = finding.matches[0] if finding.matches else None
+            payload = first_match.payload if first_match else None
+            contexts = Counter(match.context for match in finding.matches)
+            context_summary = ", ".join(f"{ctx}:{cnt}" for ctx, cnt in contexts.items())
+            description = (
+                f"{len(finding.matches)} payload(s) reflected in contexts [{context_summary}]"
+                if context_summary
+                else "Payload reflected without encoding"
             )
-            for param_name in field_names:
-                lower = param_name.lower()
-                # 토큰 관련 파라미터는 건너뜀
-                if any(keyword in lower for keyword in TOKEN_KEYWORDS):
-                    continue
-
-                success_count = 0
-                context_counts: Dict[str, int] = {}
-                # 각 페이로드를 테스트하여 취약점 여부 확인
-                for payload in self.payloads:
-                    result = self._test_payload(point, param_name, payload)
-                    if result:
-                        self._record(point, param_name, result)
-                        success_count += 1
-                        context_counts[result.context] = (
-                            context_counts.get(result.context, 0) + 1
-                        )
-
-                if success_count:
-                    summary = ", ".join(
-                        f"{ctx}:{cnt}" for ctx, cnt in context_counts.items()
-                    )
-                    logger.info(
-                        "[RESULT] Parameter '%s' success -> %s (total=%d)",
-                        param_name,
-                        summary,
-                        success_count,
-                    )
-                else:
-                    logger.debug(
-                        "[RESULT] Parameter '%s' -> no successful payloads", param_name
-                    )
-
-            # 저장형 XSS 테스트 (POST 메서드 + 폼 입력 지점인 경우)
-            if point.method.upper() == "POST" and point.source == "form":
-                stored_result = self._test_stored(point)
-                if stored_result:
-                    self._record_stored(point, stored_result)
-                    logger.info("[RESULT] Stored payload persisted for this form input")
-
-        # 발견된 취약점 리스트를 딕셔너리 형태로 반환
-        return [finding.as_dict() for finding in self.findings.values()]
-
-    def print_summary(self) -> None:
-        # 스캔 결과 요약 출력 함수
-        findings = list(self.findings.values())
-        if not findings:
-            print("\n✅ No reflected XSS detected")
-            return
-
-        print(f"\n⚠️  Reflected/Stored XSS detected in {len(findings)} location(s)")
-        for idx, finding in enumerate(findings, 1):
-            print(f"\n[{idx}] {finding.url}")
-            print(f"    Parameter: {finding.parameter}")
-            print(f"    Method: {finding.method}")
-            print(f"    Successful payloads: {len(finding.matches)}")
+            evidence = first_match.description if first_match else None
+            results.append(
+                S2NFinding(
+                    id=f"xss-{idx}",
+                    plugin="xss",
+                    severity=severity_high,
+                    title="Cross-Site Scripting Detected",
+                    description=description,
+                    url=finding.url,
+                    parameter=finding.parameter,
+                    method=finding.method,
+                    payload=payload,
+                    evidence=evidence,
+                    confidence=confidence_val,
+                    timestamp=datetime.now(timezone.utc),
+                )
+            )
+        return results
