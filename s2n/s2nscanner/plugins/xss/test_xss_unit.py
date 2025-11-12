@@ -105,3 +105,63 @@ def test_prompt_normal_input(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda _: "test_value")
     result = _prompt("input> ")
     assert result == "test_value"
+
+
+@pytest.mark.unit
+def test_payload_result_dataclass():
+    """PayloadResult 기본 생성 및 필드 검증"""
+    from s2n.s2nscanner.plugins.xss.xss_scanner import PayloadResult
+
+    pr = PayloadResult(
+        payload="<script>alert(1)</script>",
+        context="html",
+        category="reflected",
+        category_ko="반사형",
+        description="Test"
+    )
+
+    assert pr.payload == "<script>alert(1)</script>"
+    assert pr.context == "html"
+    assert pr.category == "reflected"
+
+
+@pytest.mark.unit
+def test_finding_as_dict():
+    """Finding.as_dict() 직렬화 검증"""
+    from s2n.s2nscanner.plugins.xss.xss_scanner import Finding, PayloadResult
+
+    pr = PayloadResult(
+        payload="<img>",
+        context="attribute",
+        category="reflected",
+        category_ko="반사형",
+        description="In attribute context"
+    )
+
+    finding = Finding(
+        url="https://test.com/app",
+        parameter="q",
+        method="GET",
+        matches=[pr]
+    )
+
+    data = finding.as_dict()
+    assert data["url"] == "https://test.com/app"
+    assert data["parameter"] == "q"
+    assert data["method"] == "GET"
+    assert len(data["successful_payloads"]) == 1
+    assert data["successful_payloads"][0]["payload"] == "<img>"
+
+
+@pytest.mark.unit
+def test_finding_multiple_matches():
+    """Finding에 여러 PayloadResult 추가"""
+    from s2n.s2nscanner.plugins.xss.xss_scanner import Finding, PayloadResult
+
+    finding = Finding(url="/test", parameter="id", method="POST")
+    finding.matches.append(PayloadResult("p1", "html", "reflected", "반사형", ""))
+    finding.matches.append(PayloadResult("p2", "attribute", "reflected", "반사형", ""))
+
+    assert len(finding.matches) == 2
+    data = finding.as_dict()
+    assert len(data["successful_payloads"]) == 2

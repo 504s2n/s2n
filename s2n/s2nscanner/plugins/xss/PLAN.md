@@ -275,7 +275,7 @@ def responses_mock():
         yield rsps
 ```
 
-### [>] test_xss_unit.py - xss.py 헬퍼 함수 테스트 (_parse_cookies, _finding_to_dict, _load_payload_path, _prompt)
+### [+] test_xss_unit.py - xss.py 헬퍼 함수 테스트 (_parse_cookies, _finding_to_dict, _load_payload_path, _prompt)
 - **목표:** 입력 문자열/객체가 예상 딕셔너리/JSON-friendly 구조로 변환되는지 검증.
 - **키 액션**
   1. `_parse_cookies`: 정상/빈/잘못된 쿠키 문자열 케이스 작성.
