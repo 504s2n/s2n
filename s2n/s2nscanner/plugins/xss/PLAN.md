@@ -33,7 +33,7 @@
 
 ## Phase 1 — Unit Tests
 
-### [>] pytest 환경 구성 (pytest.ini, requirements-test.txt, .gitignore)
+### [+] pytest 환경 구성 (pytest.ini, requirements-test.txt, .gitignore)
 - **목표:** 공용 테스트 설정(마커, addopts, filterwarnings)과 의존성 목록을 정의한다.
 - **키 액션**
   1. `pytest.ini`에 마커와 기본 옵션 추가.
