@@ -16,3 +16,9 @@ __pycache__
 .env.prod
 dist/
 
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.pyc

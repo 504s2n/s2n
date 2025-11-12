@@ -29,7 +29,7 @@ else:
 # 로컬 개발/테스트 중 모듈이 없을 때는 SimpleNamespace로
 # PluginContext → PluginResult 흐름을 유지한다.
 try:
-    from s2n.interfaces import (
+    from s2n.s2nscanner.interfaces import (
         ScanConfig,
         ScanContext,
         PluginConfig,
