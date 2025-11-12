@@ -1,218 +1,491 @@
 """
-# 실제 스캐닝 엔진 (플러그인 관리 + 실행))
-이 모듈은 s2n의 핵심 로직을 구현합니다.
-CLI나 패키지 방식으로 호출될 수 있으며, 
-DVWA Adapter 인증 -> HttpClient 공유 -> Plugin 실행 -> ScanReport 반환의 흐름을 관리합니다.
+Scanner 엔진
+-------------
+ScanConfig/ScanContext ↔ PluginContext ↔ PluginResult/ScanReport 흐름을 담당합니다.
+플러그인 로드, 실행, 결과 집계를 관리하며 인터페이스 모듈에서 정의한 데이터 구조에 맞춰
+최종 ScanReport를 반환합니다.
 """
 
 from __future__ import annotations
-import logging
+
+import getpass
 import importlib
+import logging
 import pkgutil
+import platform
+import socket
+import sys
+import traceback
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
-from s2n.s2nscanner.interfaces import Finding, Severity
+try:
+    from importlib import metadata as importlib_metadata
+except ImportError:  # pragma: no cover - <py3.8 fallback>
+    import importlib_metadata  # type: ignore
+
+from s2n.s2nscanner.finding import create_plugin_result, create_scan_report
 from s2n.s2nscanner.http.client import HttpClient
+from s2n.s2nscanner.interfaces import (
+    Confidence,
+    Finding,
+    PluginConfig,
+    PluginContext,
+    PluginError,
+    PluginResult,
+    PluginStatus,
+    ScanConfig,
+    ScanContext,
+    ScanMetadata,
+    ScanReport,
+    Severity,
+)
 
-class ScanReport:
-    def __init__(self, targets: List[str]):
-        self.targets = targets
-        self.findings: List[Finding] = []
-        self.started_at = datetime.utcnow()
-        self.finished_at: Optional[datetime] = None
-
-    def add_finding(self, finding: Finding):
-        self.findings.append(finding)
-
-    def summerize(self) -> str:
-        duration = (
-            (self.finished_at - self.started_at).total_seconds()
-            if self.finished_at
-            else 0.0
-        )
-        return (
-            f"Scan completed: {len(self.findings)} findings "
-            f"across {len(self.targets)} targets "
-            f"in {duration:.2f}s"
-        )
+PLUGIN_PACKAGE = "s2n.s2nscanner.plugins"
+DEFAULT_SCANNER_VERSION = "0.1.0"
 
 
 class Scanner:
-    # (1) __init__ 초기화
+    """
+    Scanner: 플러그인 탐색/실행을 오케스트레이션 하고 최종 ScanReport 생성
+
+    - config(필수): ScanConfig
+    - auth_adapter(선택), http_client(선택), on_finding(선택: Finding 단위 콜백)
+    """
     def __init__(
-            self,
-            plugins: Optional[List[Any]] = None,
-            config: Optional[Dict[str, Any]] = None,
-            auth_adapter: Optional[Any] = None,
-            http_client: Optional[HttpClient] = None,
-            # 아래부터 얘네 쓸/말, 초기값 논의 필요
-            concurrency: int = 1,
-            timeout: int = 15,
-            logger: Optional[logging.Logger] = None,
-            on_finding: Optional[Callable[[Finding], None]] = None,
-    ):
-        self.plugins = plugins or []
-        self.config = config or {}
+        self,
+        config: ScanConfig,
+        *,
+        scan_context: Optional[ScanContext] = None,
+        plugins: Optional[List[Any]] = None,
+        auth_adapter: Optional[Any] = None,
+        http_client: Optional[HttpClient] = None,
+        concurrency: int = 1,
+        timeout: int = 15,
+        logger: Optional[logging.Logger] = None,
+        on_finding: Optional[Callable[[Finding], None]] = None,
+    ) -> None:
+        if config is None:
+            raise ValueError("Scanner requires a ScanConfig instance.")
+
+        self.config = config
+        self.logger = logger or logging.getLogger("s2n.scanner")
         self.auth_adapter = auth_adapter
         self.http_client = http_client
+        self.plugins = plugins or []
         self.concurrency = concurrency
         self.timeout = timeout
-        self.logger = logger or logging.getLogger("s2n.entry")
         self.on_finding = on_finding
 
         self._discovered_plugins: List[Any] = []
-        self.logger.debug("Scanner Initialized (plugins = %d)", len(self.plugins or []))
+        self._scanner_version = self._resolve_version()
+        self.scan_context = self._prepare_scan_context(scan_context)
 
-    # (2) discover_plugins - 플러그인 로드
+        self.logger.debug(
+            "Scanner initialized. target=%s, plugins(preloaded)=%d",
+            self.config.target_url,
+            len(self.plugins),
+        )
+
+    # 플러그인 탐색/실행/정규화
     def discover_plugins(self) -> List[Any]:
+        """
+        플러그인 동적 탐색:
+        우선순위 1) 외부에서 인스턴스 리스트로 주입된 self.plugins 사용
+        우선순위 2) s2n.s2nscanner.plugins 패키지 하위 모듈 순회하며 Plugin() 팩토리 호출
+        """
         if self.plugins:
             self._discovered_plugins = self.plugins
-            self.logger.info("Loaded %d provided plugins.", len(self.plugins))
+            self.logger.debug("Using %d pre-loaded plugin instances.", len(self.plugins))
             return self._discovered_plugins
-        
-        self.logger.info("Discovering plugins dynamically...")
-        try:
-            package = "s2n.s2nscanner.plugins"
-            pkg = importlib.import_module(package)
-            for _, modname, _ in pkgutil.iter_modules(pkg.__path__):
-                module = importlib.import_module(f"{package}.{modname}")
-                if hasattr(module, "Plugin"):
-                    try:
-                        inst = module.Plugin()
-                        self._discovered_plugins.append(inst)
-                        self.logger.debug("Plugin loaded: %s", modname)    
-                    except Exception:
-                        self.logger.exception("Failed to instantiate plugin %s", modname)
-        except Exception as e:
-            self.logger.exception("Plugin discovery failed.: %s", e)
-    
-        return self._discovered_plugins
-    
-# (3) _authenticate 인증 관리
-    def _authenticate(self, target_url: Optional[str] = None) -> bool:
-        if not self.auth_adapter:
-            self.logger.debug("No authentication adapter provided. Skipping login.")
-            return True
-        
-        try:
-            ok = self.auth_adapter.login()
-            if ok:
-                self.http_client = getattr(self.auth_adapter, "http", self.http_client)
-                self.logger.info("Authentication succeeded via DVWA Adapter.")
-                return True
-            else:
-                self.logger.warning("Authentication failed. Adapter.login returned False.")
-                return False
-        except Exception as e:
-            self.logger.exception(f"Authentication error: {e}")
-            return False
 
-    # 문자열 또는 Severity 입력을 받아 Severity enum으로 반환 (기본 MEDIUM) 
-    def _normalize_severity(self, val: Any) -> Severity:
-        if isinstance(val, Severity):
-            return val
-        if isinstance(val, str):
+        if self._discovered_plugins:
+            return self._discovered_plugins
+
+        self.logger.debug("Discovering plugins from package '%s'...", PLUGIN_PACKAGE)
+        try:
+            package = importlib.import_module(PLUGIN_PACKAGE)
+        except ImportError as exc:
+            self.logger.error("Failed to import plugin package '%s': %s", PLUGIN_PACKAGE, exc)
+            return []
+
+        for _, modname, _ in pkgutil.iter_modules(package.__path__):
+            module_name = f"{PLUGIN_PACKAGE}.{modname}"
             try:
-                return Severity(val)
-            except ValueError:
-                try:
-                    return Severity(val.upper())
-                except Exception:
-                    return Severity.MEDIUM
-        return Severity.MEDIUM
+                module = importlib.import_module(module_name)
+                factory = getattr(module, "Plugin", None)
+                if not callable(factory):
+                    self.logger.debug("Module %s does not expose Plugin factory; skipped.", module_name)
+                    continue
+                instance = factory()
+                self._discovered_plugins.append(instance)
+                self.logger.debug("Loaded plugin '%s'.", getattr(instance, "name", modname))
+            except Exception:  
+                self.logger.exception("Failed to load plugin module '%s'.", module_name)
 
-    # 플러그인이 반환한 dict를 Finding 인스턴스로 안전히 변환
-    def _dict_to_finding(self, plugin_name: str, d: Dict[str, Any], default_url: str, uuid) -> Finding:
-        fid = d.get("id") or str(uuid.uuid4())
-        severity = self._normalize_severity(d.get("severity", Severity.MEDIUM))
-        title = d.get("title", "Unnamed finding")
-        description = d.get("description", "")
-        url = d.get("url", default_url)
-        payload = d.get("payload")
-        evidence = d.get("evidence")
+        return self._discovered_plugins
+
+    def scan(self) -> ScanReport:
+        self.logger.info("🧭 Starting scan for target %s", self.config.target_url)
+        self.scan_context.start_time = datetime.utcnow()
+
+        plugin_results: List[PluginResult] = []
+
+        for plugin in self.discover_plugins():
+            plugin_name = getattr(plugin, "name", plugin.__class__.__name__)
+            self.logger.info(f"🔍 Executing plugin: {plugin_name}")
+            plugin_config = self._resolve_plugin_config(plugin_name)
+
+            if not plugin_config.enabled:
+                self.logger.info("⏩ Plugin '%s' disabled via configuration. Skipping.", plugin_name)
+                skipped = self._build_skipped_result(plugin_name, "disabled")
+                plugin_results.append(skipped)
+                continue
+
+            try:
+                result = self._run_plugin(plugin, plugin_name, plugin_config)
+
+                # ✅ None 방어 처리
+                if result is None:
+                    self.logger.warning(f"⚠️ Plugin '{plugin_name}' returned None. Forcing FAILED PluginResult.")
+                    err = PluginError(
+                        error_type="PluginContractError",
+                        message="plugin.run() returned None",
+                        traceback=None,
+                    )
+                    result = create_plugin_result(
+                        plugin_name=plugin_name,
+                        findings=[],
+                        start_time=datetime.utcnow(),
+                        status=PluginStatus.FAILED,
+                        error=err,
+                    )
+
+                # ✅ 타입 확인 로그
+                self.logger.debug(f"✅ Plugin '{plugin_name}' returned type: {type(result).__name__}")
+
+                plugin_results.append(result)
+
+                # findings 접근 전 유효성 체크
+                findings = getattr(result, "findings", None)
+                if findings is not None:
+                    self._emit_findings(findings)
+                else:
+                    self.logger.warning(f"⚠️ Plugin '{plugin_name}' returned result without 'findings' field.")
+
+            except Exception as e:
+                self.logger.exception(f"💥 Plugin '{plugin_name}' crashed: {e}")
+                plugin_results.append(
+                    self._plugin_failure_result(plugin_name, e, datetime.utcnow())
+                )
+
+        # --- 리포트 작성
+        end_time = datetime.utcnow()
+        metadata = self._build_metadata()
+        report = create_scan_report(
+            scan_id=self.scan_context.scan_id,
+            target_url=self.config.target_url,
+            scanner_version=self._scanner_version,
+            start_time=self.scan_context.start_time,
+            end_time=end_time,
+            config=self.config,
+            plugin_results=plugin_results,
+            metadata=metadata,
+        )
+
+        setattr(self.scan_context, "last_report", report)
+
+        self.logger.info(
+            "🏁 Scan completed in %.2fs (%d plugins).",
+            report.duration_seconds,
+            len(plugin_results),
+        )
+        return report
+
+    def _prepare_scan_context(self, scan_context: Optional[ScanContext]) -> ScanContext:
+        """
+        ScanContext 준비
+        """
+        if scan_context is None:
+            ctx = ScanContext(
+                scan_id=f"scan-{uuid.uuid4().hex}",
+                start_time=datetime.utcnow(),
+                config=self.config,
+                http_client=self.http_client or HttpClient(),
+                crawler=None,
+            )
+        else:
+            ctx = scan_context
+            if not getattr(ctx, "config", None):
+                ctx.config = self.config
+            if not getattr(ctx, "scan_id", None):
+                ctx.scan_id = f"scan-{uuid.uuid4().hex}"
+
+        # HTTP client resolution
+        if getattr(ctx, "http_client", None):
+            self.http_client = ctx.http_client
+        else:
+            ctx.http_client = self.http_client or HttpClient()
+            self.http_client = ctx.http_client
+
+        # Prefer adapter-managed client if available
+        if self.auth_adapter and hasattr(self.auth_adapter, "get_client"):
+            try:
+                ctx.http_client = self.auth_adapter.get_client()
+                self.http_client = ctx.http_client
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception("Failed to obtain http client from auth adapter.")
+
+        setattr(ctx, "target_url", getattr(ctx, "target_url", self.config.target_url))
+        setattr(ctx, "auth_adapter", self.auth_adapter)
+
+        if self.config.auth_config:
+            ctx.auth_config = self.config.auth_config
+
+        return ctx
+
+    def _resolve_version(self) -> str:
+        try:
+            return importlib_metadata.version("s2n")
+        except Exception:  # pragma: no cover - metadata lookup failure
+            return DEFAULT_SCANNER_VERSION
+
+    def _resolve_plugin_config(self, plugin_name: str) -> PluginConfig:
+    # 플러그인 이름에 따라 PluginConfig 조회, 없으면 기본 반환
+        config = (
+            self.config.plugin_configs.get(plugin_name)
+            or self.config.plugin_configs.get(plugin_name.lower())
+        )
+        return config or PluginConfig()
+
+    def _run_plugin(
+        self,
+        plugin: Any,
+        plugin_name: str,
+        plugin_config: PluginConfig,
+        ) -> PluginResult:
+        start_time = datetime.utcnow()
+        plugin_logger = logging.getLogger(f"s2n.plugins.{plugin_name}")
+
+        self.logger.debug(f"🚀 Running plugin '{plugin_name}' with config: {plugin_config}")
+
+        plugin_context = PluginContext(
+            plugin_name=plugin_name,
+            scan_context=self.scan_context,
+            plugin_config=plugin_config,
+            target_urls=[self.config.target_url],
+            logger=plugin_logger,
+        )
+
+        # --- set_logger / configure
+        for method_name in ("set_logger", "configure"):
+            if hasattr(plugin, method_name):
+                try:
+                    getattr(plugin, method_name)(plugin_logger if method_name == "set_logger" else plugin_config, self.scan_context)
+                    self.logger.debug(f"🧩 {plugin_name}.{method_name}() executed successfully.")
+                except Exception as e:
+                    self.logger.debug(f"⚠️ {plugin_name}.{method_name}() failed: {e}")
+
+        # --- run() 실행
+        if hasattr(plugin, "run"):
+            try:
+                raw_result = plugin.run(plugin_context)
+                self.logger.debug(f"🧩 Plugin '{plugin_name}' run() finished, return type={type(raw_result).__name__}")
+
+                # PluginResult 직접 반환 시 그대로 사용
+                if isinstance(raw_result, PluginResult):
+                    self.logger.debug(f"✅ '{plugin_name}' returned valid PluginResult.")
+                    return raw_result
+
+                # dict/list/Finding 등 변환 처리
+                findings = self._normalize_findings(plugin_name, raw_result, self.config.target_url)
+                self.logger.debug(f"📊 '{plugin_name}' normalized findings count={len(findings)}")
+
+                return create_plugin_result(
+                    plugin_name=plugin_name,
+                    findings=findings,
+                    start_time=start_time,
+                    status=PluginStatus.SUCCESS,
+                )
+
+            except Exception as exc:
+                self.logger.exception(f"💣 Exception during {plugin_name}.run(): {exc}")
+                return self._plugin_failure_result(plugin_name, exc, start_time)
+
+        else:
+            self.logger.warning(f"⚠️ Plugin '{plugin_name}' has no run() method.")
+            return create_plugin_result(
+                plugin_name=plugin_name,
+                findings=[],
+                start_time=start_time,
+                status=PluginStatus.SKIPPED,
+                metadata={"reason": "no run() method"},
+            )
+
+    def _plugin_failure_result(
+        self,
+        plugin_name: str,
+        exc: Exception,
+        start_time: datetime,
+    ) -> PluginResult:
+        # 플러그인 실행 중 예외를 표준 PluginResult로 변환
+        error = PluginError(
+            error_type=type(exc).__name__,
+            message=str(exc),
+            traceback=traceback.format_exc(),
+        )
+        return create_plugin_result(
+            plugin_name=plugin_name,
+            findings=[],
+            start_time=start_time,
+            status=PluginStatus.FAILED,
+            error=error,
+        )
+    
+    def _build_skipped_result(self, plugin_name: str, reason: str) -> PluginResult:
+        # 스킵된 플러그인 결과 생성
+        start_time = datetime.utcnow()
+        return create_plugin_result(
+            plugin_name=plugin_name,
+            findings=[],
+            start_time=start_time,
+            status=PluginStatus.SKIPPED,
+            metadata={"reason": reason},
+        )
+    
+    def _normalize_findings(
+            self,
+            plugin_name: str,
+            raw_result: Any,
+            default_url: str,
+        ) -> List[Finding]:
+            """
+            허용 입력: None, Finding, dict, List/Set/Tuple
+            """
+            if raw_result is None:
+                return []
+            
+            items: Sequence[Any]
+            if isinstance(raw_result, (list, tuple, set)):
+                items = list(raw_result)
+            else:
+                items = [raw_result]
+
+            findings: List[Finding] = []
+            for item in items:
+                if item is None:
+                    continue
+                if isinstance(item, Finding):
+                    findings.append(item)
+                elif isinstance(item, dict):
+                    findings.append(self._dict_to_finding(plugin_name, item, default_url))
+                else:
+                    self.logger.debug(
+                        "Plugin '%s' returned unsupported finding type: %s",
+                        plugin_name,
+                        type(item).__name__,
+                    )
+            return findings
+    
+    def _dict_to_finding(self, plugin_name: str, data: Dict[str, Any], default_url: str) -> Finding:
+        """
+        dict -> Finding 시 누락 필드 보정
+        """
+        fid = data.get("id") or f"{plugin_name}-{uuid.uuid4().hex[:8]}"
+        severity = self._normalize_severity(data.get("severity", Severity.MEDIUM))
+        confidence = self._normalize_confidence(data.get("confidence"))
+        references = data.get("references") or []
+
         return Finding(
             id=fid,
             plugin=plugin_name,
             severity=severity,
-            title=title,
-            description=description,
-            url=url,
-            payload=payload,
-            evidence=evidence,
+            title=data.get("title", "Unnamed finding"),
+            description=data.get("description", ""),
+            url=data.get("url", default_url),
+            parameter=data.get("parameter"),
+            method=data.get("method"),
+            payload=data.get("payload"),
+            evidence=data.get("evidence"),
+            remediation=data.get("remediation"),
+            references=list(references),
+            cwe_id=data.get("cwe_id"),
+            cvss_score=data.get("cvss_score"),
+            cvss_vector=data.get("cvss_vector"),
+            confidence=confidence,
+        )
+    
+    def _normalize_severity(self, value: Any) -> Severity:
+        """문자열/Enum 혼용 입력을 Severity Enum으로 정규화."""
+        if isinstance(value, Severity):
+            return value
+        if isinstance(value, str):
+            try:
+                return Severity[value.upper()]
+            except KeyError:
+                try:
+                    return Severity(value)
+                except Exception:
+                    return Severity.MEDIUM
+        return Severity.MEDIUM
+
+    def _normalize_confidence(self, value: Any) -> Confidence:
+        """문자열/Enum 혼용 입력을 Confidence Enum으로 정규화."""
+        if isinstance(value, Confidence):
+            return value
+        if isinstance(value, str):
+            try:
+                return Confidence[value.upper()]
+            except KeyError:
+                try:
+                    return Confidence(value)
+                except Exception:
+                    return Confidence.FIRM
+        return Confidence.FIRM
+
+    # ------------------------------------------------------------------ #
+    # (3) 출력 단계: 메타데이터/콜백
+    # ------------------------------------------------------------------ #
+    def _build_metadata(self) -> ScanMetadata:
+        """
+        환경 메타데이터 작성:
+        - hostname, username, python_version, os_info, cli_args, config_file
+        """
+        try:
+            hostname = socket.gethostname()
+        except Exception:  # pragma: no cover
+            hostname = "unknown"
+
+        try:
+            username = getpass.getuser()
+        except Exception:  # pragma: no cover
+            username = "unknown"
+
+        python_version = platform.python_version()
+        os_info = f"{platform.system()} {platform.release()}".strip()
+        cli_args = sys.argv[1:] if len(sys.argv) > 1 else None
+        config_file = getattr(self.config, "config_path", None)
+
+        return ScanMetadata(
+            hostname=hostname,
+            username=username,
+            python_version=python_version,
+            os_info=os_info,
+            cli_args=cli_args,
+            config_file=str(config_file) if config_file else None,
         )
 
-    # (4) run_target - 단일 타겟 스캔 (모든 플러그인 순차 실행)
-    def run_target(self, target: str) -> List[Finding]:
-        self.logger.info(f"Scanning target: {target}")
+    def _emit_findings(self, findings: Sequence[Finding]) -> None:
+        """
+        Finding 단위 콜백(on_finding)이 등록된 경우 호출.
+        - 실시간 콘솔 출력/웹소켓 송신/진행바 업데이트 등에서 사용 가능
+        """
+        if not self.on_finding or not findings:
+            return
 
-        if not self._authenticate(target):
-            self.logger.error("Authentication failed; skipping target: %s", target)
-            return []
-        
-        if not self.http_client:
-            self.http_client = HttpClient(base_url=target)
-            self.logger.debug("Created HttpClient for target: %s", target)
-
-        findings: List[Finding] = []
-
-        for plugin in self._discovered_plugins:
-            plugin_name = getattr(plugin, "name", plugin.__class__.__name__)
+        for finding in findings:
             try:
-                if hasattr(plugin, "initialize"):
-                    try:
-                        plugin.initialize(self.config.get(plugin_name, {}), self.http_client)
-                    except TypeError:
-                        plugin.initialize()
-
-                #플러그인은 Finding 객체 리스트 또는 dict 리스트를 반환해야 함
-                plugin_results = plugin.scan(target, self.http_client)
-
-                if isinstance(plugin_results, (Finding, dict)):
-                    plugin_results = [plugin_results]
-
-                for item in plugin_results:
-                    if isinstance(item, Finding):
-                        f = item
-                    elif isinstance(item, dict):
-                        f = self._dict_to_finding(plugin_name, item, default_url = target)
-                    else:
-                        self.logger.warning("Plugin %s returned unsupported result type: %s", plugin_name, type(item))
-                        continue
-
-                    findings.append(f)
-                    if self.on_finding:
-                        try:
-                            self.on_finding(f)
-                        except Exception:
-                            self.logger.exception("on_finding callback raised an exception.")
-
-                self.logger.info("Plugin %s: %d findings", plugin_name, len([x for x in plugin_results if x]))
-            except Exception as e:
-                self.logger.exception("Plugin %s failed during scan: %s", plugin_name, e)
-                continue
-            finally:
-                if hasattr(plugin, "teardown"):
-                    try:
-                        plugin.teardown()
-                    except Exception:
-                        self.logger.debug("Plugin %s teardown failed.", plugin_name)
-        
-        return findings
-
-    # 여러 타깃을 순회하며 전체 스캔 수행 및 ScanReport 반환
-    def run(self, targets:List[str]) -> ScanReport:
-        report = ScanReport(targets)
-        self.logger.info("Starting scan for %d targets", len(targets))
-
-        self.discover_plugins()
-
-        for target in targets:
-            t_findings = self.run_target(target)
-            for f in t_findings:
-                report.add_finding(f)
-
-        report.finished_at = datetime.utcnow()
-        self.logger.info(report.summerize())
-        return report
+                self.on_finding(finding)
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception("on_finding callback raised an exception.")
