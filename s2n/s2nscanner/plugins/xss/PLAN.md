@@ -117,7 +117,7 @@ FORM_WITH_MULTIPLE_INPUTS_HTML = """
 COOKIE_HEADER = "session_id=abc123; user=test"
 ```
 
-### [>] conftest.py 공통 픽스처 정의 (responses_mock, payload_path 등)
+### [+] conftest.py 공통 픽스처 정의 (responses_mock, payload_path 등)
 - **목표:** HTTP 모킹, 페이로드 임시 파일, PluginContext 더블 등을 제공.
 - **키 액션**
   1. **CRITICAL**: `s2n.s2nscanner.interfaces` 경로로 import (실제 코드와 일치).

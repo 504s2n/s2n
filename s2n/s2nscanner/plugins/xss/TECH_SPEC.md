@@ -18,8 +18,8 @@
 [+] test_fixtures.py 데이터 상수 작성 (HTML/페이로드 샘플)
     Commit ID: a7a89cf / Commit Message: test/xss : 1. unit test - fixtures 데이터 상수 작성
 
-[>] conftest.py 공통 픽스처 정의 (responses_mock, payload_path 등)
-    Commit ID: ________ / Commit Message: ________________________________________
+[+] conftest.py 공통 픽스처 정의 (responses_mock, payload_path 등)
+    Commit ID: 62fbb6b / Commit Message: test/xss : 1. unit test - conftest 공통 픽스처 정의
 
 [>] test_xss_unit.py - xss.py 헬퍼 함수 테스트 (_parse_cookies, _finding_to_dict)
     Commit ID: ________ / Commit Message: ________________________________________
