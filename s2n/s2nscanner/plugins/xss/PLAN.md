@@ -1,5 +1,83 @@
 # PLAN.md — XSS Plugin Test Roadmap
 
+---
+
+## 🚀 작업 진행 상황 (Commit Tracking)
+
+### Phase 1: 핵심 단위 테스트 (Unit Tests)
+```
+[+] pytest 환경 구성 (pytest.ini, requirements-test.txt, .gitignore)
+    Commit ID: 807251f / Commit Message: test/xss : 1. unit test - pytest 환경 구성
+
+[+] test_fixtures.py 데이터 상수 작성 (HTML/페이로드 샘플)
+    Commit ID: a7a89cf / Commit Message: test/xss : 1. unit test - fixtures 데이터 상수 작성
+
+[+] conftest.py 공통 픽스처 정의 (responses_mock, payload_path 등)
+    Commit ID: 62fbb6b / Commit Message: test/xss : 1. unit test - conftest 공통 픽스처 정의
+
+[+] test_xss_unit.py - xss.py 헬퍼 함수 테스트 (_parse_cookies, _finding_to_dict)
+    Commit ID: 74c5e0b / Commit Message: test/xss : 1. unit test - xss 헬퍼 함수 테스트
+
+[+] test_xss_unit.py - xss_scanner.py 데이터 클래스 테스트 (PayloadResult, Finding)
+    Commit ID: b8f3d11 / Commit Message: test/xss : 1. unit test - xss_scanner 데이터 클래스 테스트
+
+[+] test_xss_unit.py - FormParser 클래스 테스트
+    Commit ID: d1d519e / Commit Message: test/xss : 1. unit test - FormParser 클래스 테스트
+
+[+] test_xss_unit.py - InputPointDetector 클래스 테스트
+    Commit ID: 983e7a2 / Commit Message: test/xss : 1. unit test - InputPointDetector 클래스 테스트
+
+[+] test_xss_unit.py - ReflectedScanner 개별 메서드 테스트 (_detect_context, _record)
+    Commit ID: 9b25852 / Commit Message: test/xss : 1. unit test - ReflectedScanner 개별 메서드 테스트
+```
+
+### Phase 2: 통합 테스트 (Integration Tests)
+```
+[>] test_xss_integration.py - ReflectedScanner 반사형 XSS 전체 플로우 (GET)
+    Commit ID: ________ / Commit Message: ________________________________________
+
+[>] test_xss_integration.py - ReflectedScanner 반사형 XSS 전체 플로우 (POST)
+    Commit ID: ________ / Commit Message: ________________________________________
+
+[>] test_xss_integration.py - ReflectedScanner CSRF 토큰 처리 테스트
+    Commit ID: ________ / Commit Message: ________________________________________
+
+[>] test_xss_integration.py - StoredScanner 저장형 XSS 전체 플로우
+    Commit ID: ________ / Commit Message: ________________________________________
+
+[>] test_xss_integration.py - XSSPlugin.run() 통합 테스트
+    Commit ID: ________ / Commit Message: ________________________________________
+```
+
+### Phase 3: E2E 테스트 및 최적화
+```
+[>] test_xss_e2e.py - CLI 기본 실행 경로 테스트
+    Commit ID: ________ / Commit Message: ________________________________________
+
+[>] test_xss_e2e.py - CLI 사용자 입력/예외 처리 테스트
+    Commit ID: ________ / Commit Message: ________________________________________
+
+[>] test_xss_e2e.py - 전체 스캔 시나리오 테스트 (반사형+저장형)
+    Commit ID: ________ / Commit Message: ________________________________________
+
+[>] 커버리지 최적화 및 누락 테스트 추가 (목표: 90%+)
+    Commit ID: ________ / Commit Message: ________________________________________
+```
+
+### Phase 4: 문서화 및 CI/CD
+```
+[>] README.md 테스트 가이드 작성
+    Commit ID: ________ / Commit Message: ________________________________________
+
+[>] GitHub Actions 워크플로우 설정 (.github/workflows/xss-tests.yml)
+    Commit ID: ________ / Commit Message: ________________________________________
+
+[>] 최종 커버리지 리포트 생성 및 검증
+    Commit ID: ________ / Commit Message: ________________________________________
+```
+
+---
+
 ## 0. Ground Rules
 - 기준 문서: `TECH_SPEC.md` (`s2n/s2nscanner/plugins/xss/TECH_SPEC.md`).
 - 모든 `[>]` 항목을 순차적으로 구현·검증·커밋한다.
@@ -796,7 +874,7 @@ def test_input_point_detector_empty_action(responses_mock, mock_http_client):
     assert form_point.url == "https://test.com/search"
 ```
 
-### [>] test_xss_unit.py - ReflectedScanner 개별 메서드 테스트 (_detect_context, _record, _record_stored, _test_payload, _test_stored)
+### [+] test_xss_unit.py - ReflectedScanner 개별 메서드 테스트 (_detect_context, _record, _record_stored, _test_payload, _test_stored)
 - **목표:** 내부 헬퍼의 결정 로직을 세밀히 검증해 회귀를 방지.
 - **키 액션**
   1. `_detect_context`의 `attribute/mixed/html` 분기 테스트.

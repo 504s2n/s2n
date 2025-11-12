@@ -57,13 +57,13 @@ except ImportError:
         def post(self, *args, **kwargs):
             return self.s.post(*args, **kwargs)
 
-from test_fixtures import SAMPLE_PAYLOADS_JSON
+from .test_fixtures import SAMPLE_PAYLOADS_JSON
 
 
 @pytest.fixture(scope="session")
 def sample_payloads():
     """테스트용 페이로드 리스트"""
-    from test_fixtures import SAMPLE_PAYLOADS
+    from .test_fixtures import SAMPLE_PAYLOADS
     return SAMPLE_PAYLOADS
 
 
