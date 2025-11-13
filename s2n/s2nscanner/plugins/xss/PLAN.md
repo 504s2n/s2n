@@ -45,8 +45,8 @@
 [+] test_xss_integration.py - ReflectedScanner CSRF 토큰 처리 테스트
     Commit ID: a463022 / Commit Message: 2. integration test - reflected xss 플로우 (GET)
 
-[>] test_xss_integration.py - StoredScanner 저장형 XSS 전체 플로우
-    Commit ID: ________ / Commit Message: ________________________________________
+[+] test_xss_integration.py - StoredScanner 저장형 XSS 전체 플로우
+    Commit ID: 5978ab8 / Commit Message: test/xss : 2. integration test - stored xss 전체 플로우
 
 [>] test_xss_integration.py - XSSPlugin.run() 통합 테스트
     Commit ID: ________ / Commit Message: ________________________________________

@@ -490,3 +490,152 @@ def test_stored_xss_scanner_flow(responses_mock, plugin_context_factory, payload
         # 저장형 XSS가 탐지되지 않은 경우도 허용
         # (테스트 환경에 따라 달라질 수 있음)
         pass
+
+
+@pytest.mark.integration
+def test_xss_plugin_run_integration(responses_mock, plugin_context_factory, payload_path):
+    """XSSPlugin.run() 통합 테스트
+
+    XSSPlugin이 PluginContext를 받아 ReflectedScanner를 실행하고
+    PluginResult를 올바르게 반환하는지 검증합니다.
+    """
+    from s2n.s2nscanner.plugins.xss.xss import XSSPlugin
+    try:
+        from s2n.s2nscanner.interfaces import PluginStatus
+    except ImportError:
+        from s2n.s2nscanner.plugins.xss.xss_scanner import PluginStatus
+
+    target_url = "https://example.com/vulnerable"
+
+    # 1. PluginContext 생성
+    context = plugin_context_factory(target_urls=[target_url])
+
+    # 2. 입력 지점 탐지를 위한 초기 GET 응답
+    responses_mock.get(
+        target_url,
+        body="""
+        <html>
+        <body>
+            <form action="/vulnerable" method="GET">
+                <input type="text" name="search" value="">
+                <input type="submit" value="Search">
+            </form>
+        </body>
+        </html>
+        """,
+        status=200
+    )
+
+    # 3. 페이로드 주입 요청에 대한 동적 응답
+    def request_callback(request):
+        """XSS 페이로드를 반사하는 취약한 응답"""
+        from urllib.parse import unquote, parse_qs, urlparse
+
+        parsed = urlparse(request.url)
+        params = parse_qs(parsed.query)
+
+        # search 파라미터 값 추출 및 디코딩
+        search_values = params.get('search', [''])
+        search_value = unquote(search_values[0]) if search_values else ''
+
+        # XSS 페이로드가 포함되면 그대로 반사
+        if any(pattern in search_value for pattern in ['<script>', 'alert', '<img', 'onerror', '<svg', '<body']):
+            body = f'<html><body><div class="results">Search results for: {search_value}</div></body></html>'
+        else:
+            body = '<html><body>No results</body></html>'
+
+        return (200, {}, body)
+
+    responses_mock.add_callback(
+        responses.GET,
+        target_url,
+        callback=request_callback
+    )
+
+    # 4. XSSPlugin 생성 및 실행
+    plugin = XSSPlugin(config={"payload_path": str(payload_path)})
+    result = plugin.run(context)
+
+    # 5. PluginResult 검증
+    assert result.plugin_name == "xss"
+    assert result.status in ["success", PluginStatus.SUCCESS]
+    assert result.urls_scanned >= 1
+    assert result.requests_sent > 0
+
+    # 6. Findings 검증
+    assert len(result.findings) >= 1, "XSS 취약점이 탐지되어야 함"
+
+    # 첫 번째 finding 상세 검증
+    first_finding = result.findings[0]
+    assert first_finding.plugin == "xss"
+    assert first_finding.url == target_url
+    assert first_finding.parameter == "search"
+    assert first_finding.method == "GET"
+    assert first_finding.payload is not None
+    assert len(first_finding.payload) > 0
+
+    # Severity와 Confidence 검증
+    assert hasattr(first_finding, "severity")
+    assert hasattr(first_finding, "confidence")
+
+
+@pytest.mark.integration
+def test_xss_plugin_no_http_client_error(plugin_context_factory, payload_path):
+    """XSSPlugin이 http_client 없이 실행되면 ValueError 발생"""
+    from s2n.s2nscanner.plugins.xss.xss import XSSPlugin
+
+    # http_client가 None인 context 생성
+    context = plugin_context_factory(target_urls=["https://test.com"])
+    context.scan_context.http_client = None
+
+    plugin = XSSPlugin(config={"payload_path": str(payload_path)})
+
+    with pytest.raises(ValueError, match="requires scan_context.http_client"):
+        plugin.run(context)
+
+
+@pytest.mark.integration
+def test_xss_plugin_uses_default_target_url(responses_mock, mock_http_client, payload_path):
+    """XSSPlugin이 target_urls가 없으면 scan_context.config.target_url 사용"""
+    from s2n.s2nscanner.plugins.xss.xss import XSSPlugin
+    from datetime import datetime, timezone
+    import time
+    try:
+        from s2n.s2nscanner.interfaces import PluginStatus, PluginContext, ScanContext, ScanConfig, PluginConfig
+    except ImportError:
+        from conftest import PluginStatus, PluginContext, ScanContext, ScanConfig, PluginConfig
+
+    target_url = "https://example.com/default"
+
+    # ScanConfig를 target_url과 함께 생성
+    scan_config = ScanConfig(target_url=target_url)
+    scan_context = ScanContext(
+        scan_id=f"test-{int(time.time())}",
+        start_time=datetime.now(timezone.utc),
+        config=scan_config,
+        http_client=mock_http_client,
+        crawler=None
+    )
+
+    # target_urls=None으로 PluginContext 생성
+    context = PluginContext(
+        plugin_name="xss",
+        scan_context=scan_context,
+        plugin_config=PluginConfig(enabled=True, timeout=5, max_payloads=50, custom_params={}),
+        target_urls=None,  # 명시적으로 None
+        logger=None
+    )
+
+    # 입력 지점 탐지용 응답
+    responses_mock.get(
+        target_url,
+        body="<html><body>Page with no forms</body></html>",
+        status=200
+    )
+
+    plugin = XSSPlugin(config={"payload_path": str(payload_path)})
+    result = plugin.run(context)
+
+    # PluginResult 검증
+    assert result.status in ["success", PluginStatus.SUCCESS]
+    assert result.urls_scanned >= 1
