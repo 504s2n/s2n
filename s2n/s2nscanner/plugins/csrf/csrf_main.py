@@ -1,7 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Any, Dict, List
-from s2n.s2nscanner.plugins.csrf.csrf_scan import csrf_scan
+from typing import List
 
 # 패키지 실행과 직접 실행을 모두 지원하기 위한 import 처리
 from s2n.s2nscanner.interfaces import (
@@ -11,10 +10,12 @@ from s2n.s2nscanner.interfaces import (
     PluginError,
     PluginResult,
     PluginStatus,
-)  
+)
+from s2n.s2nscanner.plugins.csrf.csrf_scan import csrf_scan
 
 # 전용 로거
 logger = logging.getLogger("s2n.plugins.csrf")
+
 
 # ======= CSRF 스캐너 기능 개발부 =========
 
@@ -38,12 +39,12 @@ class CSRFScanner:
         target_urls = plugin_context.target_urls
 
         try:
-        # for 문이든 뭐든 써서,  target_urls로 개별 url 스캔 수행하게 만들기
-        
+            # for 문이든 뭐든 써서,  target_urls로 개별 url 스캔 수행하게 만들기
+
             for url in target_urls:
                 scan_result = csrf_scan(url, http_client=client, plugin_context=plugin_context)
                 findings.extend(scan_result)
-        
+
         except Exception as e:
             logger.exception("[CSRFScanner.run] plugin error: %s", e)
             return PluginError(
@@ -51,7 +52,7 @@ class CSRFScanner:
                 message=str(e),
                 traceback=str(e.__traceback__)
             )
-        
+
         return PluginResult(
             plugin_name=self.name,
             status=PluginStatus.PARTIAL if findings else PluginStatus.SUCCESS,
@@ -67,6 +68,7 @@ class CSRFScanner:
 # 메인 함수
 def main(config: None | PluginConfig = None):
     return CSRFScanner(config)
+
 
 # 이 파일을 직접 실행할 때 main()을 호출
 if __name__ == "__main__":

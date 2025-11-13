@@ -1,10 +1,14 @@
+import logging
 import uuid
 from typing import List, Optional, Any
-from s2n.s2nscanner.plugins.csrf.csrf_utils import FormParser
+
 from s2n.s2nscanner.http.client import HttpClient
 from s2n.s2nscanner.interfaces import PluginContext, Finding, HTTPRequest, Severity, Confidence
 from s2n.s2nscanner.plugins.csrf.csrf_constants import CSRF_TOKEN_KEYWORDS, USER_AGENT
-from s2n.s2nscanner.plugins.csrf.csrf_main import logger
+from s2n.s2nscanner.plugins.csrf.csrf_utils import FormParser
+
+logger = logging.getLogger("s2n.plugins.csrf")
+
 
 # TODO:
 # - CSRF Keyword CVE 등 참조하여 키워드 목록 보강 (+ 동적으로 로드하는 기능 고려)
@@ -13,9 +17,9 @@ from s2n.s2nscanner.plugins.csrf.csrf_main import logger
 
 
 def csrf_scan(
-    target_url: str,
-    http_client: Optional[HttpClient] = None,
-    plugin_context: Optional[PluginContext] = None,
+        target_url: str,
+        http_client: Optional[HttpClient] = None,
+        plugin_context: Optional[PluginContext] = None,
 ) -> List[Finding]:
     """
     지정된 URL에 대해 CSRF 취약점 검사를 수행합니다.
@@ -54,7 +58,7 @@ def csrf_scan(
         html_form_result = scan_form_tags(html, resp, target_url)
         results.extend([html_result, http_result, html_form_result])
         # Form 태그 등에서 CSRF 토큰 미존재 취약점 발견 시 결과 추가
-        
+
         # Response Header 검사
 
     except Exception as e:
@@ -68,7 +72,7 @@ def csrf_scan(
 # TODO: CSRF HTTP Request/Response 헤더 검사 로직 추가 필요
 # TODO: Form, Input 태그 내의 검사 로직
 # TODO: 정적 검사 추가 
-def scan_html(html: str, resp: Any, target_url: str,) -> Finding:
+def scan_html(html: str, resp: Any, target_url: str, ) -> Finding:
     """
     주어진 HTML에서 CSRF 취약점을 검사합니다.
     CSRF 토큰이 발견되지 않으면 Finding 객체를 반환합니다.
@@ -139,6 +143,7 @@ def scan_html(html: str, resp: Any, target_url: str,) -> Finding:
         confidence=Confidence.TENTATIVE,
     )
 
+
 def scan_res_headers(headers: dict) -> Finding:
     """
     HTTP 응답 헤더에서 CSRF 관련 보안 헤더를 검사합니다.
@@ -148,7 +153,7 @@ def scan_res_headers(headers: dict) -> Finding:
     # TODO: SameSite 쿠키 설정은 쿠키 단위로 검사해야함.
     # TODO: 와일드카드 값 * 사용 여부 검사
     # TODO: Set-Cookie, CSP 헤더 값 검사
-    
+
     missing_headings = [h for h in headings_to_check if h not in headers]
     if missing_headings:
         return Finding(
@@ -175,7 +180,7 @@ def scan_res_headers(headers: dict) -> Finding:
             cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N",
             confidence=Confidence.FIRM,
         )
-        
+
     return Finding(
         id=str(uuid.uuid4()),
         plugin="csrf",
@@ -201,7 +206,8 @@ def scan_res_headers(headers: dict) -> Finding:
         confidence=Confidence.TENTATIVE,
     )
 
-def scan_form_tags(html: str, resp: Any, target_url: str,) -> Finding:
+
+def scan_form_tags(html: str, resp: Any, target_url: str, ) -> Finding:
     """
     주어진 HTML에서 Form 태그 내 CSRF 취약점을 검사합니다.
     CSRF 토큰이 발견되지 않으면 Finding 객체를 반환합니다.
@@ -229,7 +235,8 @@ def scan_form_tags(html: str, resp: Any, target_url: str,) -> Finding:
             request=HTTPRequest(
                 method="GET",
                 url=target_url,
-                headers=dict(resp.request.headers) if hasattr(resp, "request") and hasattr(resp.request, "headers") else {},
+                headers=dict(resp.request.headers) if hasattr(resp, "request") and hasattr(resp.request,
+                                                                                           "headers") else {},
                 body=None,
                 cookies=dict(resp.request._cookies) if hasattr(resp.request, "_cookies") else {},
             ),
@@ -258,7 +265,8 @@ def scan_form_tags(html: str, resp: Any, target_url: str,) -> Finding:
                 token_found = True
                 break
 
-            if any(k.lower() in name for k in CSRF_TOKEN_KEYWORDS) or any(k.lower() in idv for k in CSRF_TOKEN_KEYWORDS):
+            if any(k.lower() in name for k in CSRF_TOKEN_KEYWORDS) or any(
+                    k.lower() in idv for k in CSRF_TOKEN_KEYWORDS):
                 token_found = True
                 break
 
@@ -269,7 +277,8 @@ def scan_form_tags(html: str, resp: Any, target_url: str,) -> Finding:
             vulnerable.append({"index": idx, "form": form})
 
     if vulnerable:
-        sample = vulnerable[0]["form"]["html"] if isinstance(vulnerable[0]["form"], dict) else str(vulnerable[0]["form"])
+        sample = vulnerable[0]["form"]["html"] if isinstance(vulnerable[0]["form"], dict) else str(
+            vulnerable[0]["form"])
         snippet = (sample[:400] + "...") if sample and len(sample) > 400 else sample
         evidence = f"{len(vulnerable)} form(s) missing CSRF token. Example snippet: {snippet}"
 
@@ -288,7 +297,8 @@ def scan_form_tags(html: str, resp: Any, target_url: str,) -> Finding:
             request=HTTPRequest(
                 method="GET",
                 url=target_url,
-                headers=dict(resp.request.headers) if hasattr(resp, "request") and hasattr(resp.request, "headers") else {},
+                headers=dict(resp.request.headers) if hasattr(resp, "request") and hasattr(resp.request,
+                                                                                           "headers") else {},
                 body=None,
                 cookies=dict(resp.request._cookies) if hasattr(resp.request, "_cookies") else {},
             ),
