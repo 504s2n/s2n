@@ -9,7 +9,7 @@
 
 .venv
 __pycache__
-
+__pycache__/
 .env
 .env.local
 .env.dev
@@ -22,3 +22,5 @@ dist/
 htmlcov/
 coverage.xml
 *.pyc
+
+.clude/settings.local.json
