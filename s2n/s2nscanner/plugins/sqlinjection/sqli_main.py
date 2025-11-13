@@ -47,7 +47,7 @@ class SQLInjectionPlugin:
     _finding_id_counter = 0
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        pass
+        self.config = config or {}
 
     def _get_new_finding_id(self):
         SQLInjectionPlugin._finding_id_counter += 1
