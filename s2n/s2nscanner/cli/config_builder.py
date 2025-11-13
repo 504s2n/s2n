@@ -1,3 +1,5 @@
+from typing import Optional
+
 from s2n.s2nscanner.interfaces import (
     ScanRequest,
     ScanConfig,
@@ -7,9 +9,16 @@ from s2n.s2nscanner.interfaces import (
     LoggingConfig,
     AuthConfig,
     AuthType,
+    PluginConfig,
 )
 
-def build_scan_config(req: ScanRequest) -> ScanConfig:
+
+def build_scan_config(
+    req: ScanRequest,
+    *,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+) -> ScanConfig:
     """
     ScanRequest -> ScanConfig 변환
     CLI 입력 기반으로 실제 Scanner 실행 설정 구성
@@ -20,8 +29,8 @@ def build_scan_config(req: ScanRequest) -> ScanConfig:
     if req.auth_type and req.auth_type != AuthType.NONE:
         auth_config = AuthConfig(
             auth_type=req.auth_type,
-            username=req.username,
-            password=req.password,
+            username=username,
+            password=password,
         )
     
     # 출력 설정 구성
@@ -38,11 +47,17 @@ def build_scan_config(req: ScanRequest) -> ScanConfig:
         console_output=True,
     )
 
+    plugin_configs: dict[str, PluginConfig] = {}
+    if req.plugins:
+        for plugin_name in req.plugins:
+            if plugin_name:
+                plugin_configs[plugin_name.lower()] = PluginConfig()
+
     # 최종 구성 반환
     return ScanConfig(
         target_url=req.target_url,
         scanner_config=ScannerConfig(crawl_depth=2),
-        plugin_configs={},
+        plugin_configs=plugin_configs,
         auth_config=auth_config,
         network_config=NetworkConfig(),
         output_config=output_cfg,

@@ -64,31 +64,37 @@ def scan(url, plugin, auth, username, password, output, verbose, log_file):
         log_file=log_file,
     )
 
+    is_dvwa_auth = (auth or "").lower() == "dvwa"
+
     # ScanRequest 변환
     request = cliargs_to_scanrequest(args)
 
     # ScanConfig 구성
-    config = build_scan_config(request)
+    config = build_scan_config(
+        request,
+        username=args.username,
+        password=args.password,
+    )
 
     # 인증/세션 생성
     http_client = None
     auth_adapter = None
-    if request.auth_type:
-        if request.auth_type.name.lower() == "dvwa":
-            logger.info("DVWA authentication requested.")
-            adapter = DVWAAdapter(base_url=request.target_url)
-            auth_cfg = config.auth_config
-            username = (auth_cfg.username if auth_cfg else None) or request.username or "admin"
-            password = (auth_cfg.password if auth_cfg else None) or request.password or "password"
-            ok = adapter.ensure_authenticated(
-                [(username, password)]
-            )
-            if ok:
-                http_client = adapter.get_client()
-                auth_adapter = adapter
-                logger.info("DVWA 로그인 완료")
-            else:
-                logger.warning("DVWA 로그인 실패 - 인증 없는 세션으로 계속 진행")
+    auth_credentials = None
+
+    if request.auth_type and is_dvwa_auth:
+        logger.info("DVWA authentication requested.")
+        adapter = DVWAAdapter(base_url=request.target_url)
+        auth_cfg = config.auth_config
+        username = (auth_cfg.username if auth_cfg else None) or args.username or "admin"
+        password = (auth_cfg.password if auth_cfg else None) or args.password or "password"
+        auth_adapter = adapter
+        auth_credentials = [(username, password)]
+        ok = adapter.ensure_authenticated(auth_credentials)
+        if ok:
+            http_client = adapter.get_client()
+            logger.info("DVWA 로그인 완료")
+        else:
+            logger.warning("DVWA 로그인 실패 - 인증 없는 세션으로 계속 진행")
 
     # ScanContext 생성
     scan_ctx = ScanContext(
@@ -100,7 +106,13 @@ def scan(url, plugin, auth, username, password, output, verbose, log_file):
     )
 
     # Scanner 실행
-    scanner = Scanner(config=config, scan_context=scan_ctx, auth_adapter=auth_adapter, logger=logger)
+    scanner = Scanner(
+        config=config,
+        scan_context=scan_ctx,
+        auth_adapter=auth_adapter,
+        auth_credentials=auth_credentials,
+        logger=logger,
+    )
     report = scanner.scan()
 
     # 결과 출력

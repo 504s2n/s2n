@@ -14,10 +14,14 @@ def cliargs_to_scanrequest(args: CLIArguments) -> ScanRequest:
     # AuthType 매핑
     auth_type = None
     if args.auth:
-        try:
-            auth_type = AuthType(args.auth.upper())
-        except ValueError:
-            raise ValidationError(f"Unknown auth type: {args.auth}")
+        upper_auth = args.auth.upper()
+        if upper_auth == "DVWA":
+            auth_type = AuthType.CUSTOM
+        else:
+            try:
+                auth_type = AuthType(upper_auth)
+            except ValueError:
+                raise ValidationError(f"Unknown auth type: {args.auth}")
         
     # 변환 수행
     return ScanRequest(
@@ -25,8 +29,6 @@ def cliargs_to_scanrequest(args: CLIArguments) -> ScanRequest:
         plugins=args.plugin or [],
         config_path=Path(args.config) if args.config else None,
         auth_type=auth_type,
-        username=args.username,
-        password=args.password,
         output_format=OutputFormat.JSON,
         output_path=Path(args.output) if args.output else None,
         verbose=args.verbose,

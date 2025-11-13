@@ -18,7 +18,7 @@ import sys
 import traceback
 import uuid
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 try:
     from importlib import metadata as importlib_metadata
@@ -60,11 +60,14 @@ class Scanner:
         scan_context: Optional[ScanContext] = None,
         plugins: Optional[List[Any]] = None,
         auth_adapter: Optional[Any] = None,
+        auth_credentials: Optional[List[Tuple[str, str]]] = None,
         http_client: Optional[HttpClient] = None,
         concurrency: int = 1,
         timeout: int = 15,
         logger: Optional[logging.Logger] = None,
         on_finding: Optional[Callable[[Finding], None]] = None,
+        defer_authentication: bool = False,
+        skip_auth_plugins: Optional[Sequence[str]] = None,
     ) -> None:
         if config is None:
             raise ValueError("Scanner requires a ScanConfig instance.")
@@ -72,6 +75,10 @@ class Scanner:
         self.config = config
         self.logger = logger or logging.getLogger("s2n.scanner")
         self.auth_adapter = auth_adapter
+        self.auth_credentials = auth_credentials or []
+        self.defer_authentication = defer_authentication
+        self.skip_auth_plugins = {name.lower() for name in (skip_auth_plugins or [])}
+        self._auth_performed = False
         self.http_client = http_client
         self.plugins = plugins or []
         self.concurrency = concurrency
@@ -79,6 +86,12 @@ class Scanner:
         self.on_finding = on_finding
 
         self._discovered_plugins: List[Any] = []
+        plugin_keys = list(self.config.plugin_configs.keys()) if self.config.plugin_configs else []
+        self.allowed_plugins_order = [key.lower() for key in plugin_keys] or None
+        self.allowed_plugins = set(self.allowed_plugins_order or [])
+        if not self.allowed_plugins:
+            self.allowed_plugins = None
+        self.prioritized_plugins = ["brute_force"]
         self._scanner_version = self._resolve_version()
         self.scan_context = self._prepare_scan_context(scan_context)
 
@@ -96,8 +109,26 @@ class Scanner:
         우선순위 2) s2n.s2nscanner.plugins 패키지 하위 모듈 순회하며 Plugin() 팩토리 호출
         """
         if self.plugins:
-            self._discovered_plugins = self.plugins
-            self.logger.debug("Using %d pre-loaded plugin instances.", len(self.plugins))
+            self._discovered_plugins = (
+                [
+                    plugin
+                    for plugin in self.plugins
+                    if not self.allowed_plugins
+                    or getattr(plugin, "name", plugin.__class__.__name__).lower()
+                    in self.allowed_plugins
+                ]
+            )
+            for plugin in self._discovered_plugins:
+                if not hasattr(plugin, "_s2n_module_name"):
+                    setattr(
+                        plugin,
+                        "_s2n_module_name",
+                        plugin.__class__.__module__.split(".")[-1],
+                    )
+            self.logger.debug(
+                "Using %d pre-loaded plugin instances.", len(self._discovered_plugins)
+            )
+            self._apply_plugin_ordering()
             return self._discovered_plugins
 
         if self._discovered_plugins:
@@ -111,6 +142,8 @@ class Scanner:
             return []
 
         for _, modname, _ in pkgutil.iter_modules(package.__path__):
+            if self.allowed_plugins and modname.lower() not in self.allowed_plugins:
+                continue
             module_name = f"{PLUGIN_PACKAGE}.{modname}"
             try:
                 module = importlib.import_module(module_name)
@@ -119,11 +152,13 @@ class Scanner:
                     self.logger.debug("Module %s does not expose Plugin factory; skipped.", module_name)
                     continue
                 instance = factory()
+                setattr(instance, "_s2n_module_name", modname)
                 self._discovered_plugins.append(instance)
                 self.logger.debug("Loaded plugin '%s'.", getattr(instance, "name", modname))
-            except Exception:  
+            except Exception:
                 self.logger.exception("Failed to load plugin module '%s'.", module_name)
 
+        self._apply_plugin_ordering()
         return self._discovered_plugins
 
     def scan(self) -> ScanReport:
@@ -131,9 +166,18 @@ class Scanner:
         self.scan_context.start_time = datetime.utcnow()
 
         plugin_results: List[PluginResult] = []
+        self._auth_performed = False
+
+        if self.auth_adapter and not self.defer_authentication:
+            self._ensure_authenticated()
 
         for plugin in self.discover_plugins():
             plugin_name = getattr(plugin, "name", plugin.__class__.__name__)
+            plugin_identifier = self._get_plugin_identifier(plugin)
+
+            if self._should_authenticate_before_plugin(plugin_identifier):
+                self._ensure_authenticated()
+
             self.logger.info(f"🔍 Executing plugin: {plugin_name}")
             plugin_config = self._resolve_plugin_config(plugin_name)
 
@@ -252,12 +296,86 @@ class Scanner:
             return DEFAULT_SCANNER_VERSION
 
     def _resolve_plugin_config(self, plugin_name: str) -> PluginConfig:
-    # 플러그인 이름에 따라 PluginConfig 조회, 없으면 기본 반환
         config = (
             self.config.plugin_configs.get(plugin_name)
             or self.config.plugin_configs.get(plugin_name.lower())
         )
         return config or PluginConfig()
+
+    def _get_plugin_identifier(self, plugin: Any) -> str:
+        module_name = getattr(plugin, "_s2n_module_name", None)
+        if module_name:
+            return module_name.lower()
+        return getattr(plugin, "name", plugin.__class__.__name__).lower()
+
+    def _apply_plugin_ordering(self) -> None:
+        if not self._discovered_plugins:
+            return
+
+        if self.allowed_plugins_order:
+            order_map = {name: idx for idx, name in enumerate(self.allowed_plugins_order)}
+
+            def order_key(plugin: Any) -> int:
+                identifier = self._get_plugin_identifier(plugin)
+                return order_map.get(identifier, len(order_map))
+
+            self._discovered_plugins.sort(key=order_key)
+            return
+
+        priority_map = {name: idx for idx, name in enumerate(self.prioritized_plugins)}
+
+        def priority_key(plugin: Any) -> tuple[int, str]:
+            identifier = self._get_plugin_identifier(plugin)
+            return (
+                priority_map.get(identifier, len(priority_map)),
+                identifier,
+            )
+
+        self._discovered_plugins.sort(key=priority_key)
+
+    def _should_authenticate_before_plugin(self, plugin_identifier: str) -> bool:
+        if not self.auth_adapter:
+            return False
+        if not self.defer_authentication:
+            return False
+        if self._auth_performed:
+            return False
+        if plugin_identifier in self.skip_auth_plugins:
+            return False
+        return True
+
+    def _ensure_authenticated(self) -> bool:
+        if not self.auth_adapter:
+            return False
+        if self._auth_performed:
+            return True
+
+        credentials = self.auth_credentials or []
+
+        try:
+            if hasattr(self.auth_adapter, "ensure_authenticated"):
+                ok = self.auth_adapter.ensure_authenticated(credentials)
+            else:
+                ok = self.auth_adapter.login()
+
+            if ok and hasattr(self.auth_adapter, "get_client"):
+                client = self.auth_adapter.get_client()
+                if client:
+                    self.http_client = client
+                    self.scan_context.http_client = client
+
+            self._auth_performed = True
+
+            if ok:
+                self.logger.info("Authentication succeeded via adapter.")
+            else:
+                self.logger.warning("Authentication failed via adapter.")
+
+            return ok
+        except Exception:
+            self._auth_performed = True
+            self.logger.exception("Authentication error.")
+            return False
 
     def _run_plugin(
         self,
