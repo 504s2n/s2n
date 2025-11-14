@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 from datetime import datetime
 import logging
@@ -15,10 +14,18 @@ from s2n.s2nscanner.report import (
     format_report_to_console,
 )
 
-# logger 초기화
+from rich.console import Console
+from rich.table import Table
+from rich import box
+
+console = Console()
+
+# ============================================================
+# Logger 초기화
+# ============================================================
 def init_logger(verbose: bool, log_file: str | None) -> logging.Logger:
     logger = logging.getLogger("s2n")
-    logger.setLevel(logging.DEBUG if verbose else logging.WARNING)
+    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     fmt = logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s")
 
     sh = logging.StreamHandler()
@@ -32,7 +39,10 @@ def init_logger(verbose: bool, log_file: str | None) -> logging.Logger:
 
     return logger
 
-# CLI entrypoint
+
+# ============================================================
+# CLI Root
+# ============================================================
 @click.group()
 def cli():
     ascii_logo = r"""
@@ -49,7 +59,10 @@ def cli():
     click.echo(ascii_logo)
     click.echo("🔍 Welcome to S2N Scanner! Use --help to explore commands.\n")
 
-# Scan 명령어
+
+# ============================================================
+# scan 명령어
+# ============================================================
 @cli.command("scan")
 @click.option("-u", "--url", required=True, help="스캔 대상 URL")
 @click.option("-p", "--plugin", multiple=True, help="사용할 플러그인 이름 (복수 선택 가능)")
@@ -63,7 +76,9 @@ def scan(url, plugin, auth, username, password, output, verbose, log_file):
     logger = init_logger(verbose, log_file)
     logger.info("Starting scan for %s", url)
 
-    # CLIArguments  구성
+    # --------------------------------------------------------
+    # CLIArguments 구성
+    # --------------------------------------------------------
     args = CLIArguments(
         url=url,
         plugin=list(plugin),
@@ -75,39 +90,34 @@ def scan(url, plugin, auth, username, password, output, verbose, log_file):
         log_file=log_file,
     )
 
-    is_dvwa_auth = (auth or "").lower() == "dvwa"
-
-    # ScanRequest 변환
     request = cliargs_to_scanrequest(args)
+    config = build_scan_config(request, username=username, password=password)
 
-    # ScanConfig 구성
-    config = build_scan_config(
-        request,
-        username=args.username,
-        password=args.password,
-    )
-
-    # 인증/세션 생성
+    # --------------------------------------------------------
+    # 인증 처리 (DVWA)
+    # --------------------------------------------------------
     http_client = None
     auth_adapter = None
     auth_credentials = None
 
-    if request.auth_type and is_dvwa_auth:
+    if (auth or "").lower() == "dvwa":
         logger.info("DVWA authentication requested.")
         adapter = DVWAAdapter(base_url=request.target_url)
-        auth_cfg = config.auth_config
-        username = (auth_cfg.username if auth_cfg else None) or args.username or "admin"
-        password = (auth_cfg.password if auth_cfg else None) or args.password or "password"
+        username = username or "admin"
+        password = password or "password"
+
         auth_adapter = adapter
         auth_credentials = [(username, password)]
-        ok = adapter.ensure_authenticated(auth_credentials)
-        if ok:
+
+        if adapter.ensure_authenticated(auth_credentials):
             http_client = adapter.get_client()
             logger.info("DVWA 로그인 완료")
         else:
-            logger.warning("DVWA 로그인 실패 - 인증 없는 세션으로 계속 진행")
+            logger.warning("DVWA 로그인 실패 - 인증 없이 진행")
 
+    # --------------------------------------------------------
     # ScanContext 생성
+    # --------------------------------------------------------
     scan_ctx = ScanContext(
         scan_id=f"scan-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
         start_time=datetime.utcnow(),
@@ -116,7 +126,6 @@ def scan(url, plugin, auth, username, password, output, verbose, log_file):
         crawler=None,
     )
 
-    # Scanner 실행
     scanner = Scanner(
         config=config,
         scan_context=scan_ctx,
@@ -124,25 +133,53 @@ def scan(url, plugin, auth, username, password, output, verbose, log_file):
         auth_credentials=auth_credentials,
         logger=logger,
     )
-    report = scanner.scan()
 
-    # 결과 출력
+    # --------------------------------------------------------
+    # Scan 실행 + Duration 계산
+    # --------------------------------------------------------
+    start = datetime.utcnow()
+    report = scanner.scan()
+    end = datetime.utcnow()
+
+    duration = (end - start).total_seconds()
+
+    # --------------------------------------------------------
+    # Report 출력
+    # --------------------------------------------------------
     try:
         output_report(report, config.output_config)
         logger.info("Scan report successfully generated.")
-    except Exception as exc:  # pylint: disable=broad-except
+    except Exception as exc:
         logger.exception("Failed to output report: %s", exc)
 
-    # verbose 모드: 콘솔 상세 출력
-    if verbose and config.output_config.format != OutputFormat.CONSOLE:
-        console_output = format_report_to_console(
-            report, mode=config.output_config.console_mode
+    # --------------------------------------------------------
+    # Rich Summary (Verbose)
+    # --------------------------------------------------------
+    if verbose:
+        table = Table(
+            title="🚀 S2N Scan Summary",
+            title_style="bold magenta",
+            box=box.SIMPLE_HEAVY,
+            show_header=False,
+            padding=(0, 1),
         )
-        click.echo("\n===== Scan Summary =====")
-        for line in console_output.summary_lines:
-            click.echo(line)
-        click.echo("========================\n")
 
+        # Target URL (config 또는 Report의 target_url)
+        target_url = getattr(report, "target_url", None) or request.target_url
+
+        # Finding 개수
+        total_findings = sum(len(p.findings) for p in report.plugin_results)
+
+        table.add_row("🎯 Target URL", target_url)
+        table.add_row("🆔 Scan ID", report.scan_id)
+        table.add_row("⏱ Duration", f"{report.duration_seconds:.2f} seconds")
+        table.add_row("🧩 Plugins Loaded", str(len(report.plugin_results)))
+        table.add_row("🔎 Findings Detected", str(total_findings))
+        table.add_row("📄 Output Format", config.output_config.format.value)
+
+        console.print("\n")
+        console.print(table)
+        console.print("\n")
 
 
 if __name__ == "__main__":
