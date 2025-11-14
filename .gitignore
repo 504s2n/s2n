@@ -22,5 +22,6 @@ dist/
 htmlcov/
 coverage.xml
 *.pyc
+dist/
 
 .clude/settings.local.json
