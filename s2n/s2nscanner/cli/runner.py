@@ -18,7 +18,7 @@ from s2n.s2nscanner.report import (
 # logger 초기화
 def init_logger(verbose: bool, log_file: str | None) -> logging.Logger:
     logger = logging.getLogger("s2n")
-    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+    logger.setLevel(logging.DEBUG if verbose else logging.WARNING)
     fmt = logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s")
 
     sh = logging.StreamHandler()
@@ -35,8 +35,19 @@ def init_logger(verbose: bool, log_file: str | None) -> logging.Logger:
 # CLI entrypoint
 @click.group()
 def cli():
-    """S2N Web Vulnerability Scanner CLI"""
-    pass
+    ascii_logo = r"""
+         _______. ___   .__   __. 
+        /       ||__ \  |  \ |  | 
+       |   (----`   ) | |   \|  | 
+        \   \      / /  |  . `  | 
+    .----)   |    / /_  |  |\   | 
+    |_______/    |____| |__| \__| 
+                              
+    
+    S2N Web Vulnerability Scanner CLI
+    """
+    click.echo(ascii_logo)
+    click.echo("🔍 Welcome to S2N Scanner! Use --help to explore commands.\n")
 
 # Scan 명령어
 @cli.command("scan")
