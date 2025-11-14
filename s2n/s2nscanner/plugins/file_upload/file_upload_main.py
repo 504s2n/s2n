@@ -18,12 +18,12 @@ from s2n.s2nscanner.interfaces import (
     PluginStatus,
     Severity,
 )
-
+	
 # 헬퍼 함수 임포트: 패키지 실행/모듈 실행/직접 실행 모두 지원
 try:
-    from .file_upload import collect_form_data, find_login_form, find_upload_form, guess_uploaded_urls, perform_login
-except Exception:
-    from file_upload import collect_form_data, find_login_form, find_upload_form, guess_uploaded_urls
+    from .file_upload_utils import collect_form_data, find_login_form, find_upload_form, guess_uploaded_urls, perform_login
+except ImportError:
+    from file_upload_utils import collect_form_data, find_login_form, find_upload_form, guess_uploaded_urls, perform_login
 
 logger = logging.getLogger("s2n.plugins.file_upload")
 
@@ -32,7 +32,7 @@ class FileUploadPlugin:
     name = "file_upload"
     description = "파일 업로드 취약점을 탐지합니다."
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: PluginContext | None = None):
         self.config = config or {}
 
     def _dfs_find_form(self, url: str, session, visited: set, base_netloc: str, stats: Dict[str, int], depth: int, max_depth: int):
@@ -212,8 +212,9 @@ class FileUploadPlugin:
             start_time=start_time,
             end_time=datetime.now(),
             duration_seconds=(datetime.now() - start_time).total_seconds(),
-            urls_scanned=urls_scanned,
-            requests_sent=requests_sent,
+            # TODO : 실제 스캔된 URL 수와 요청 수로 변경
+            urls_scanned=len(target_urls),
+            requests_sent=len(target_urls)
         )
 
 
