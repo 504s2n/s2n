@@ -17,6 +17,7 @@ dependencies = [
     "selenium>=4.20",
     "webdriver-manager",
     "click>=8.0",
+    "rich>=13.0",
 ]
 
 [project.urls]
