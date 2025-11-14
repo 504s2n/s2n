@@ -1,5 +1,8 @@
 name: s2n CI/CD Pipeline
 
+# push: main으로 push -> CI 실행
+# pull_request -> CI 실행
+# release: PyPI 배포 실행
 on:
   push:
     branches: [ main ]
@@ -7,6 +10,7 @@ on:
   release:
     types: [published]
 
+    # 코드 체크아웃, python 3.11 세팅, pytest 실행
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -21,7 +25,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest core -v || echo "No tests found, skipping"
+          pytest test -v || echo "No tests found, skipping"
 
   build-package:
     needs: build-test
