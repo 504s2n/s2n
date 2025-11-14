@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "s2n"
-version= "0.2.0"
+version= "0.2.1"
 description = "Plugin-based web vulnerabillity scanner library"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -29,7 +29,7 @@ Issues = "https://github.com/504s2n/s2n/issues"
 dev = ["pytest", "build", "twine"]
 
 [project.scripts]
-s2n = "s2n.core.scanner:main"
+s2n = "s2n.s2nscanner.cli.runner:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]
