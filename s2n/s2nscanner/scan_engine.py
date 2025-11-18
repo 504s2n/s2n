@@ -386,6 +386,11 @@ class Scanner:
         plugin_name: str,
         plugin_config: PluginConfig,
         ) -> PluginResult:
+
+        # 0. 초기화 및 Context 준비 (initialize)
+        # plugin instance는 discover_plugins()에서 이미 생성됨
+        # 인스턴스 생성 시 __init__()가 호출되었으므로 별도 초기화 단계는 없음
+
         start_time = datetime.utcnow()
         plugin_logger = get_logger(f"plugins.{plugin_name}")
 
@@ -399,7 +404,7 @@ class Scanner:
             logger=plugin_logger,
         )
 
-        # --- set_logger / configure
+        # 레거시 호환성: set_logger / configure 호출 (새 플러그인은 __Init__에서 처리)
         for method_name in ("set_logger", "configure"):
             if hasattr(plugin, method_name):
                 try:
@@ -409,40 +414,82 @@ class Scanner:
                     self.logger.debug(f"⚠️ {plugin_name}.{method_name}() failed: {e}")
 
         # --- run() 실행
+        # 1. pre-scan
+        if hasattr(plugin, "pre_scan"):
+            try:
+                self.logger.info(f"🔧 Pre-scan setup for plugin '{plugin_name}'")
+                plugin.pre_scan(plugin_context)
+                self.logger.info(f"✅ Pre-scan for plugin '{plugin_name}' completed.")
+            except Exception as exc:
+                self.logger.exception(f"💣 Exception during {plugin_name}.pre_scan(): {exc}")
+
+        # 2. run
+        raw_result = None
         if hasattr(plugin, "run"):
             try:
+                self.logger.info(f"▶️ Executing run() for plugin '{plugin_name}'")
                 raw_result = plugin.run(plugin_context)
                 self.logger.debug(f"🧩 Plugin '{plugin_name}' run() finished, return type={type(raw_result).__name__}")
 
-                # PluginResult 직접 반환 시 그대로 사용
-                if isinstance(raw_result, PluginResult):
-                    self.logger.debug(f"✅ '{plugin_name}' returned valid PluginResult.")
-                    return raw_result
-
-                # dict/list/Finding 등 변환 처리
-                findings = self._normalize_findings(plugin_name, raw_result, self.config.target_url)
-                self.logger.debug(f"📊 '{plugin_name}' normalized findings count={len(findings)}")
-
-                return create_plugin_result(
-                    plugin_name=plugin_name,
-                    findings=findings,
-                    start_time=start_time,
-                    status=PluginStatus.SUCCESS,
-                )
-
             except Exception as exc:
                 self.logger.exception(f"💣 Exception during {plugin_name}.run(): {exc}")
-                return self._plugin_failure_result(plugin_name, exc, start_time)
+                raw_result = self._plugin_failure_result(plugin_name, exc, start_time)
 
-        else:
-            self.logger.warning(f"⚠️ Plugin '{plugin_name}' has no run() method.")
+        # 3. post-scan
+        is_result_plugin_result = isinstance(raw_result, PluginResult)
+
+        if not is_result_plugin_result and hasattr(plugin, "post_scan"):
+            try:
+                self.logger.info(f"▶️ {plugin_name}.post_scan() started")
+                final_result = plugin.post_scan(plugin_context)
+                self.logger.info(f"✅ {plugin_name}.post_scan() completed")
+
+                if not isinstance(final_result, PluginResult):
+                    raise TypeError("post_scan() must return a PluginResult instance, got {type(final_result).__name__}")
+                
+                raw_result = final_result
+            
+            except Exception as exc:
+                self.logger.exception(f"💣 Exception during {plugin_name}.post_scan(): {exc}")
+                raw_result = self._plugin_failure_result(plugin_name, exc, start_time)
+                
+
+        # 4. cleanup
+        if hasattr(plugin, "cleanup"):
+            try:
+                self.logger.info(f"🧹 {plugin_name}.cleanup() started")
+                plugin.cleanup(plugin_context)
+                self.logger.info(f"✅ {plugin_name}.cleanup() completed")
+            except Exception as exc:
+                self.logger.exception(f"⚠️ Exception during {plugin_name}.cleanup(): {exc}")
+
+        # 5. 최종 결과 반환 및 정규화
+        if raw_result is None:
+            if not hasattr(plugin, "run") and not hasattr(plugin, "post_scan"):
+                self.logger.warning(f"⚠️ Plugin '{plugin_name}' has no run() or post_scan() method. Skipping.")
+                return self._build_skipped_result(plugin_name, "no run() or post_scan() method")
+            
+            err = PluginError(error_type="PluginContractError", message="plugin returned None", timestamp=datetime.utcnow)
+            return self._plugin_failure_result(plugin_name, err, start_time)
+        
+
+        if not isinstance(raw_result, PluginResult):
+            findings = self._normalize_findings(plugin_name, raw_result, self.config.target_url)
+            self.logger.debug(f"📊 '{plugin_name}' normalized findings count={len(findings)}")
+
             return create_plugin_result(
                 plugin_name=plugin_name,
-                findings=[],
+                findings=findings,
                 start_time=start_time,
-                status=PluginStatus.SKIPPED,
-                metadata={"reason": "no run() method"},
+                status=PluginStatus.SUCCESS,
             )
+
+        findings = getattr(raw_result, "findings", None) 
+        if findings is not None:
+            self._emit_findings(findings)
+
+        return raw_result
+        
 
     def _plugin_failure_result(
         self,
