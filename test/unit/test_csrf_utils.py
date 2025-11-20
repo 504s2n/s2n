@@ -1,7 +1,7 @@
 from s2n.s2nscanner.plugins.csrf.csrf_utils import FormParser
-from s2n.s2nscanner.plugins.csrf.test.test_data import HTML_WITH_CSRF_TOKEN, HTML_WITHOUT_CSRF
+from test.unit.test_csrf_data import HTML_WITH_CSRF_TOKEN, HTML_WITHOUT_CSRF
 
-
+# TODO: MockRes / MockRep --> 실제 비동기 요청과 동일하게 동작하도록 수정
 def test_formparser_parses_forms_and_inputs():
     parser = FormParser()
     parser.feed(HTML_WITH_CSRF_TOKEN)
