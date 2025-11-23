@@ -4,7 +4,6 @@ import html
 import json
 import time
 import re
-import logging
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -86,7 +85,6 @@ class InputPoint:
 
 # HTML form 파서
 class FormParser(HTMLParser):
-
     def __init__(self):
         super().__init__()
         self.forms: List[Dict] = []
@@ -137,7 +135,9 @@ class InputPointDetector:
         url_params = parse_qs(parsed.query)
         if url_params:
             # 쿼리 파라미터가 존재하면 첫 번째 값만 추출하여 파라미터 딕셔너리 생성
-            params = {k: v[0] if isinstance(v, list) else v for k, v in url_params.items()}
+            params = {
+                k: v[0] if isinstance(v, list) else v for k, v in url_params.items()
+            }
             logger.info("[DETECT] Query parameters: %s", list(params.keys()))
             points.append(
                 InputPoint(
@@ -160,7 +160,9 @@ class InputPointDetector:
                     params = {}
                     for field in form["inputs"]:
                         name = field["name"]
-                        value = field["value"] or "test"  # 기본값이 없으면 'test'로 설정
+                        value = (
+                            field["value"] or "test"
+                        )  # 기본값이 없으면 'test'로 설정
                         field_type = field["type"].lower()
 
                         if field_type in {"submit", "button"}:
@@ -264,7 +266,9 @@ class ReflectedScanner:
         cookies: Optional[Dict[str, str]] = None,
     ):
         if http_client is None:
-            raise ValueError("ReflectedScanner requires an injected HttpClient/transport.")
+            raise ValueError(
+                "ReflectedScanner requires an injected HttpClient/transport."
+            )
 
         self.transport = http_client
         self._setup_session(http_client, cookies)
@@ -274,7 +278,9 @@ class ReflectedScanner:
         self._requests_sent = 0
         self._urls_scanned = 0
 
-    def _setup_session(self, http_client: Any, cookies: Optional[Dict[str, str]]) -> None:
+    def _setup_session(
+        self, http_client: Any, cookies: Optional[Dict[str, str]]
+    ) -> None:
         self.session = getattr(http_client, "s", None)
         if self.session is None and isinstance(http_client, requests.Session):
             self.session = http_client
@@ -298,7 +304,9 @@ class ReflectedScanner:
 
     def _extract_config(self, context: PluginContext) -> dict:
         # http_client: scan_context에서 우선 추출, 없으면 기본 transport 사용
-        http_client = getattr(getattr(context, "scan_context", None), "http_client", None)
+        http_client = getattr(
+            getattr(context, "scan_context", None), "http_client", None
+        )
         if http_client is None:
             http_client = self.transport
 
@@ -328,9 +336,7 @@ class ReflectedScanner:
     def _should_skip_param(self, param_name: str) -> bool:
         return any(k in param_name.lower() for k in TOKEN_KEYWORDS)
 
-    def _detect_input_points(
-        self, url: str, http_client: Any
-    ) -> List[InputPoint]:
+    def _detect_input_points(self, url: str, http_client: Any) -> List[InputPoint]:
         detector = InputPointDetector(http_client)
         points = detector.detect(url)
 
@@ -410,7 +416,9 @@ class ReflectedScanner:
         timeout: int,
     ) -> None:
         for payload in payloads:
-            self._test_payload_on_param(point, param_name, payload, http_client, timeout)
+            self._test_payload_on_param(
+                point, param_name, payload, http_client, timeout
+            )
 
     def _scan_input_point(
         self, point: InputPoint, max_payloads: int, http_client: Any, timeout: int
@@ -478,7 +486,11 @@ class ReflectedScanner:
         return self._build_result(context, start_dt, status, plugin_error)
 
     def _build_result(
-        self, context: PluginContext, start_dt: datetime, status: PluginStatus, plugin_error
+        self,
+        context: PluginContext,
+        start_dt: datetime,
+        status: PluginStatus,
+        plugin_error,
     ) -> PluginResult:
         end_dt = datetime.now(timezone.utc)
         s2n_findings = self._as_s2n_findings()
@@ -502,6 +514,7 @@ class ReflectedScanner:
         )
 
         # Stored XSS 테스트
+
     def _test_stored(self, point: InputPoint) -> Optional[PayloadResult]:
         params = point.parameters.copy()
         unique_tag = (

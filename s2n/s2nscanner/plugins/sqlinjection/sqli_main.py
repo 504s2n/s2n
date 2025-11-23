@@ -30,7 +30,7 @@ from s2n.s2nscanner.interfaces import (
 from s2n.s2nscanner.logger import get_logger
 
 # HTTP 클라이언트 (별도 모듈)
-from s2n.s2nscanner.http.client import HttpClient
+from s2n.s2nscanner.clients.http_client import HttpClient
 
 # 모듈 임포트 (상대 경로 사용)
 from .sqli_config import TEST_PAYLOAD, TEST_PAYLOAD_TIME_BLIND, TIME_THRESHOLD
