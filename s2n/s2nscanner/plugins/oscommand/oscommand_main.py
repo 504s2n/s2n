@@ -40,7 +40,7 @@ DEFAULT_PAYLOADS: Sequence[str] = [
     "|id",
     ";whoami",
     "|whoami",
-    ";cat /etc/passwd",
+    ";echo vulnerable",
     "|uname -a",
     "&echo vulnerable",
 ]
