@@ -4,3 +4,4 @@ selenium~=4.20
 beautifulsoup4~=4.12
 webdriver-manager
 click
+responses
