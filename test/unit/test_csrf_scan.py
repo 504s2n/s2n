@@ -32,10 +32,10 @@ def test_scan_res_headers_checks_presence():
     # missing headers -> MEDIUM severity
     missing = csrf_scan_module.scan_res_headers({})
     assert missing.severity.name == "MEDIUM"
-    assert "Missing CSRF Protection Headers" in missing.title
+    assert "CSRF Protection Headers Issues" in missing.title
 
     ok = csrf_scan_module.scan_res_headers(
-        {"X-Frame-Options": "DENY", "Content-Security-Policy": "", "SameSite": "Lax"}
+        {"X-Frame-Options": "DENY", "Content-Security-Policy": "default-src 'self'"}
     )
     assert ok.severity.name == "INFO"
 

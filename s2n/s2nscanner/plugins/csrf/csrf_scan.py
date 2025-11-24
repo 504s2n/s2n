@@ -79,7 +79,6 @@ def csrf_scan(
 
 # HTML 텍스트에서 CSRF 토큰 존재 여부 검사
 # TODO: CSRF HTTP Request/Response 헤더 검사 로직 추가 필요
-# TODO: Form, Input 태그 내의 검사 로직
 # TODO: 정적 검사 추가
 def scan_html(
     html: str,
@@ -164,24 +163,36 @@ def scan_res_headers(headers: dict) -> Finding:
     HTTP 응답 헤더에서 CSRF 관련 보안 헤더를 검사합니다.
     CSRF 보호 헤더가 없으면 Finding 객체를 반환합니다.
     """
-    headings_to_check = ["X-Frame-Options", "Content-Security-Policy", "SameSite"]
-    # TODO: SameSite 쿠키 설정은 쿠키 단위로 검사해야함.
-    # TODO: 와일드카드 값 * 사용 여부 검사
-    # TODO: Set-Cookie, CSP 헤더 값 검사
+    headings_to_check = ["X-Frame-Options", "Content-Security-Policy"]
+    issues = []
 
+    # 기본 헤더 누락 검사
     missing_headings = [h for h in headings_to_check if h not in headers]
     if missing_headings:
+        issues.append(f"Missing headers: {', '.join(missing_headings)}")
+
+    # Set-Cookie 헤더에서 SameSite 쿠키 검사
+    set_cookie = headers.get("Set-Cookie", "")
+    if set_cookie and "samesite" not in set_cookie.lower():
+        issues.append("Set-Cookie without SameSite attribute")
+
+    # CSP 헤더 와일드카드 검사
+    csp = headers.get("Content-Security-Policy", "")
+    if csp and ("*" in csp or "'unsafe-inline'" in csp or "'unsafe-eval'" in csp):
+        issues.append("CSP contains wildcard or unsafe directives")
+
+    if issues:
         return Finding(
             id=str(uuid.uuid4()),
             plugin="csrf",
             severity=Severity.MEDIUM,
-            title="Missing CSRF Protection Headers",
-            description=f"The following CSRF protection headers are missing: {', '.join(missing_headings)}.",
+            title="CSRF Protection Headers Issues",
+            description=f"Security issues detected in CSRF protection headers: {'; '.join(issues)}.",
             url="N/A",
             parameter=None,
             method=None,
             payload=None,
-            evidence=f"Missing headers: {', '.join(missing_headings)}",
+            evidence="; ".join(issues),
             request=None,
             response=None,
             remediation="Implement appropriate CSRF protection headers such as X-Frame-Options, Content-Security-Policy, and SameSite cookies.",
