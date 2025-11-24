@@ -42,7 +42,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: ./docker/dev/Dockerfile
+          file: ./docker/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/s2n:dev

@@ -86,6 +86,31 @@ jobs:
             TWINE_PASSWORD: ${{ secrets.PYPI_PASS }}
           run: |
             twine upload dist/* --non-interactive || echo "Deployment skipped"
+  docker-deploy:  
+    needs: build-package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        if: github.event_name == 'release' && github.event.action == 'published'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.DEV_PKG_TOKEN }}
+
+      # 1. 도커 이미지 빌드 2. ghcr에 등록 ghcr.io/<owner>/s2n-docker:latest
+      - name: Build and push Docker image to GHCR
+        uses: docker/build-push-action@v4
+        if: github.event_name == 'release' && github.event.action == 'published'
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/s2n-docker:latest
 
 
 
