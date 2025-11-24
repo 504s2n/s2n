@@ -25,10 +25,9 @@ def test_scan_res_headers_all_missing():
 
     assert result.plugin == "csrf"
     assert result.severity == Severity.MEDIUM
-    assert "Missing CSRF Protection Headers" in result.title
+    assert "CSRF Protection Headers Issues" in result.title
     assert "X-Frame-Options" in result.evidence
     assert "Content-Security-Policy" in result.evidence
-    assert "SameSite" in result.evidence
     assert result.cwe_id == "CWE-352"
     assert result.cvss_score == 5.0
 
@@ -56,15 +55,14 @@ def test_scan_res_headers_partial():
     """일부 보안 헤더만 존재하는 경우"""
     headers = {
         "X-Frame-Options": "SAMEORIGIN"
-        # Content-Security-Policy와 SameSite 누락
+        # Content-Security-Policy 누락
     }
 
     result = scan_res_headers(headers)
 
     assert result.severity == Severity.MEDIUM
-    assert "Missing CSRF Protection Headers" in result.title
+    assert "CSRF Protection Headers Issues" in result.title
     assert "Content-Security-Policy" in result.evidence
-    assert "SameSite" in result.evidence
     assert (
         "X-Frame-Options" not in result.evidence
     )  # 이미 존재하므로 누락 목록에 없어야 함
@@ -77,14 +75,13 @@ def test_scan_res_headers_case_sensitivity():
     headers = {
         "x-frame-options": "DENY",  # 소문자
         "content-security-policy": "default-src 'self'",  # 소문자
-        "samesite": "Lax",  # 소문자
     }
 
     result = scan_res_headers(headers)
 
     # 현재 구현은 대소문자를 구분하므로 누락으로 판단됨
     assert result.severity == Severity.MEDIUM
-    assert "Missing CSRF Protection Headers" in result.title
+    assert "CSRF Protection Headers Issues" in result.title
 
 
 @pytest.mark.integration
@@ -137,7 +134,7 @@ def test_csrf_scan_integration_with_missing_headers():
     # http_result (scan_res_headers의 결과) 검증
     http_result = results[1]  # 두 번째 항목이 scan_res_headers의 결과
     assert http_result.severity == Severity.MEDIUM
-    assert "Missing CSRF Protection Headers" in http_result.title
+    assert "CSRF Protection Headers Issues" in http_result.title
 
 
 @pytest.mark.integration
@@ -192,7 +189,7 @@ def test_csrf_scan_with_plugin_context():
             )
             response.headers = {
                 "Content-Security-Policy": "default-src 'self'"
-                # X-Frame-Options와 SameSite 누락
+                # X-Frame-Options 누락
             }
             return response
 
@@ -208,7 +205,6 @@ def test_csrf_scan_with_plugin_context():
     http_result = results[1]
     assert http_result.severity == Severity.MEDIUM
     assert "X-Frame-Options" in http_result.evidence
-    assert "SameSite" in http_result.evidence
 
 
 @pytest.mark.integration
@@ -259,27 +255,24 @@ def test_header_values_with_different_policies():
             "headers": {
                 "X-Frame-Options": "DENY",
                 "Content-Security-Policy": "default-src 'none'",
-                "SameSite": "Strict",
             },
             "expected": Severity.INFO,
         },
         {
-            "name": "SAMEORIGIN policy",
+            "name": "SAMEORIGIN policy with unsafe-inline",
             "headers": {
                 "X-Frame-Options": "SAMEORIGIN",
                 "Content-Security-Policy": "default-src 'self'; script-src 'unsafe-inline'",
-                "SameSite": "Lax",
             },
-            "expected": Severity.INFO,
+            "expected": Severity.MEDIUM,  # CSP contains unsafe directive
         },
         {
             "name": "Empty CSP value",
             "headers": {
                 "X-Frame-Options": "DENY",
                 "Content-Security-Policy": "",  # 빈 값
-                "SameSite": "None; Secure",
             },
-            "expected": Severity.INFO,  # 헤더가 존재하므로 INFO
+            "expected": Severity.INFO,  # 헤더가 존재하고 빈 값은 문제 없음
         },
     ]
 
