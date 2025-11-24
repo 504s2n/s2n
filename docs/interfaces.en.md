@@ -66,9 +66,9 @@ Output Types (JSONOutput, HTMLOutput, ConsoleOutput)
 - Purpose: Top-level data structure for a scan request
 - Usage timing: After parsing CLI arguments or when calling the Python API
 
-| Field             | Type                   | Required | Default   | Description                   |
-| ----------------- | ---------------------- | -------- | --------- | ----------------------------- |
-| `target_url`    | `str`                | ✅       | -         | URL to scan                   |
+| Field           | Type                 | Required | Default | Description                   |
+| --------------- | -------------------- | -------- | ------- | ----------------------------- |
+| `target_url`    | `str`                | ✅       | -       | URL to scan                   |
 | `plugins`       | `List[str]`          | ❌       | `[]`    | List of plugins to use        |
 | `config_path`   | `Optional[Path]`     | ❌       | `None`  | Path to configuration file    |
 | `auth_type`     | `Optional[AuthType]` | ❌       | `None`  | Authentication type           |
@@ -83,18 +83,19 @@ Output Types (JSONOutput, HTMLOutput, ConsoleOutput)
 
 Fields:
 
-| Field             | Type                   | Required | Description                   |
-| ----------------- | ---------------------- | -------- | ----------------------------- |
-| `url` | `str` | ✅ | `--url`, `-u` |
-| `plugin` | `List[str]` | ❌ | `--plugin`, `-p` (multiple allowed) |
-| `config` | `Optional[str]` | ❌ | `--config`, `-c` |
-| `auth` | `Optional[str]` | ❌ | `--auth`, `-a`|
-| `username` | `Optional[str]` | ❌ | `--username` |
-| `password` | `Optional[str]` | ❌ | `--password` |
-| `output` | `Optional[str]` | ❌ | `--output`, `-o` |
-| `depth` | `int` | ❌ | `--depth`, `-d` (default: `2`) |
-| `verbose` | `bool` | ❌ | `--verbose`, `-v` |
-| `log_file` | `Optional[str]` | ❌ | `--log-file` |
+| Field           | Type            | Required | Description                         |
+| --------------- | --------------- | -------- | ----------------------------------- |
+| `url`           | `str`           | ✅       | `--url`, `-u`                       |
+| `plugin`        | `List[str]`     | ❌       | `--plugin`, `-p` (multiple allowed) |
+| `config`        | `Optional[str]` | ❌       | `--config`, `-c`                    |
+| `auth`          | `Optional[str]` | ❌       | `--auth`, `-a`                      |
+| `username`      | `Optional[str]` | ❌       | `--username`                        |
+| `password`      | `Optional[str]` | ❌       | `--password`                        |
+| `output`        | `Optional[str]` | ❌       | `--output`, `-o`                    |
+| `output_format` | `Optional[str]` | ❌       | `--output-format`                   |
+| `depth`         | `int`           | ❌       | `--depth`, `-d` (default: `2`)      |
+| `verbose`       | `bool`          | ❌       | `--verbose`, `-v`                   |
+| `log_file`      | `Optional[str]` | ❌       | `--log-file`                        |
 
 ---
 
@@ -105,15 +106,15 @@ Fields:
 - Purpose: Manage the overall scan configuration
 - Usage timing: After `ScanRequest` is created, before scan execution
 
-| Field             | Type                      | Default | Description                   |
-| ----------------- | ------------------------- | ------- | ----------------------------- |
-| `target_url`      | `str`                     | -       | URL to scan                   |
-| `scanner_config`  | `ScannerConfig`           | -       | Scanner engine settings       |
-| `plugin_configs`  | `Dict[str, PluginConfig]` | `{}`    | Per-plugin configurations     |
-| `auth_config`     | `Optional[AuthConfig]`    | `None`  | Authentication settings        |
-| `network_config`  | `NetworkConfig`           | -       | Network settings              |
-| `output_config`   | `OutputConfig`            | -       | Output settings               |
-| `logging_config`  | `LoggingConfig`           | -       | Logging settings              |
+| Field            | Type                      | Default | Description               |
+| ---------------- | ------------------------- | ------- | ------------------------- |
+| `target_url`     | `str`                     | -       | URL to scan               |
+| `scanner_config` | `ScannerConfig`           | -       | Scanner engine settings   |
+| `plugin_configs` | `Dict[str, PluginConfig]` | `{}`    | Per-plugin configurations |
+| `auth_config`    | `Optional[AuthConfig]`    | `None`  | Authentication settings   |
+| `network_config` | `NetworkConfig`           | -       | Network settings          |
+| `output_config`  | `OutputConfig`            | -       | Output settings           |
+| `logging_config` | `LoggingConfig`           | -       | Logging settings          |
 
 Creation methods:
 
@@ -128,16 +129,16 @@ Creation methods:
 - Purpose: Scanner engine runtime settings
 - Usage timing: Part of `ScanConfig`
 
-| Field             | Type   | Default                | Range      | Description                   |
-| ----------------- | ------ | ---------------------- | ---------- | ----------------------------- |
-| `crawl_depth`     | `int`  | `2`                    | 1-10       | Crawl depth                   |
-| `max_threads`     | `int`  | `5`                    | 1-20       | Maximum threads               |
-| `timeout`         | `int`  | `30`                   | 1-300      | Request timeout (seconds)     |
-| `max_retries`     | `int`  | `3`                    | 0-10       | Maximum retry attempts        |
-| `retry_delay`     | `float`| `1.0`                  | 0.1-10.0   | Retry delay (seconds)         |
-| `user_agent`      | `str`  | `"S2N-Scanner/0.1.0"`   | -          | User-Agent header             |
-| `follow_redirects`| `bool` | `True`                 | -          | Follow redirects              |
-| `verify_ssl`      | `bool` | `True`                 | -          | Verify SSL certificates       |
+| Field              | Type    | Default               | Range    | Description               |
+| ------------------ | ------- | --------------------- | -------- | ------------------------- |
+| `crawl_depth`      | `int`   | `2`                   | 1-10     | Crawl depth               |
+| `max_threads`      | `int`   | `5`                   | 1-20     | Maximum threads           |
+| `timeout`          | `int`   | `30`                  | 1-300    | Request timeout (seconds) |
+| `max_retries`      | `int`   | `3`                   | 0-10     | Maximum retry attempts    |
+| `retry_delay`      | `float` | `1.0`                 | 0.1-10.0 | Retry delay (seconds)     |
+| `user_agent`       | `str`   | `"S2N-Scanner/0.1.0"` | -        | User-Agent header         |
+| `follow_redirects` | `bool`  | `True`                | -        | Follow redirects          |
+| `verify_ssl`       | `bool`  | `True`                | -        | Verify SSL certificates   |
 
 ---
 
@@ -146,15 +147,15 @@ Creation methods:
 - Purpose: Configuration for an individual plugin
 - Usage timing: Part of `ScanConfig.plugin_configs`
 
-| Field               | Type                | Default | Description                        |
-| ------------------- | ------------------- | ------- | ---------------------------------- |
-| `enabled`           | `bool`              | `True`  | Whether the plugin is enabled      |
-| `timeout`           | `int`               | `30`    | Plugin timeout                     |
-| `max_payloads`      | `Optional[int]`     | `None`  | Maximum number of payloads         |
-| `payload_file`      | `Optional[Path]`    | `None`  | Custom payload file                |
-| `severity_threshold`| `Severity`          | `LOW`   | Minimum severity to report         |
-| `skip_patterns`     | `List[str]`         | `[]`    | URL patterns to skip               |
-| `custom_params`     | `Dict[str, Any]`    | `{}`    | Plugin-specific custom parameters  |
+| Field                | Type             | Default | Description                       |
+| -------------------- | ---------------- | ------- | --------------------------------- |
+| `enabled`            | `bool`           | `True`  | Whether the plugin is enabled     |
+| `timeout`            | `int`            | `30`    | Plugin timeout                    |
+| `max_payloads`       | `Optional[int]`  | `None`  | Maximum number of payloads        |
+| `payload_file`       | `Optional[Path]` | `None`  | Custom payload file               |
+| `severity_threshold` | `Severity`       | `LOW`   | Minimum severity to report        |
+| `skip_patterns`      | `List[str]`      | `[]`    | URL patterns to skip              |
+| `custom_params`      | `Dict[str, Any]` | `{}`    | Plugin-specific custom parameters |
 
 Example (SQL Injection plugin):
 
@@ -177,15 +178,15 @@ PluginConfig(
 - Purpose: Authentication settings
 - Usage timing: Part of `ScanConfig`
 
-| Field       | Type                | Required | Default | Description            |
-| ----------- | ------------------- | -------- | ------- | ---------------------- |
-| `auth_type` | `AuthType`          | ✅       | -       | Authentication type    |
-| `username`  | `Optional[str]`     | ❌       | `None`  | Username               |
-| `password`  | `Optional[str]`     | ❌       | `None`  | Password               |
-| `token`     | `Optional[str]`     | ❌       | `None`  | Bearer token           |
-| `api_key`   | `Optional[str]`     | ❌       | `None`  | API key                |
-| `headers`   | `Dict[str, str]`    | ❌       | `{}`    | Custom headers         |
-| `cookies`   | `Dict[str, str]`    | ❌       | `{}`    | Cookies                |
+| Field       | Type             | Required | Default | Description         |
+| ----------- | ---------------- | -------- | ------- | ------------------- |
+| `auth_type` | `AuthType`       | ✅       | -       | Authentication type |
+| `username`  | `Optional[str]`  | ❌       | `None`  | Username            |
+| `password`  | `Optional[str]`  | ❌       | `None`  | Password            |
+| `token`     | `Optional[str]`  | ❌       | `None`  | Bearer token        |
+| `api_key`   | `Optional[str]`  | ❌       | `None`  | API key             |
+| `headers`   | `Dict[str, str]` | ❌       | `{}`    | Custom headers      |
+| `cookies`   | `Dict[str, str]` | ❌       | `{}`    | Cookies             |
 
 AuthType Enum:
 
@@ -203,14 +204,14 @@ AuthType Enum:
 - Purpose: Network layer settings
 - Usage timing: Part of `ScanConfig`
 
-| Field              | Type             | Default | Description                        |
-| ------------------ | ---------------- | ------- | ---------------------------------- |
-| `max_connections`  | `int`            | `100`   | Maximum concurrent connections     |
-| `connection_timeout`| `int`            | `10`    | Connection timeout (seconds)      |
-| `read_timeout`     | `int`            | `30`    | Read timeout (seconds)             |
-| `rate_limit`       | `Optional[float]`| `None`  | Maximum requests per second        |
-| `proxy`            | `Optional[str]`  | `None`  | Proxy URL                          |
-| `dns_cache_ttl`    | `int`            | `300`   | DNS cache TTL (seconds)            |
+| Field                | Type              | Default | Description                    |
+| -------------------- | ----------------- | ------- | ------------------------------ |
+| `max_connections`    | `int`             | `100`   | Maximum concurrent connections |
+| `connection_timeout` | `int`             | `10`    | Connection timeout (seconds)   |
+| `read_timeout`       | `int`             | `30`    | Read timeout (seconds)         |
+| `rate_limit`         | `Optional[float]` | `None`  | Maximum requests per second    |
+| `proxy`              | `Optional[str]`   | `None`  | Proxy URL                      |
+| `dns_cache_ttl`      | `int`             | `300`   | DNS cache TTL (seconds)        |
 
 ---
 
@@ -219,14 +220,14 @@ AuthType Enum:
 - Purpose: Output settings
 - Usage timing: Part of `ScanConfig`
 
-| Field              | Type             | Default   | Description                   |
-| ------------------ | ---------------- | --------- | ----------------------------- |
-| `format`           | `OutputFormat`   | `JSON`    | Output format                 |
-| `path`             | `Optional[Path]`| `None`    | Output file path              |
-| `pretty_print`     | `bool`           | `True`    | JSON pretty print             |
-| `include_timestamps`| `bool`          | `True`    | Include timestamps            |
-| `include_metadata` | `bool`           | `True`    | Include metadata              |
-| `console_mode`     | `ConsoleMode`    | `SUMMARY` | Console output mode           |
+| Field                | Type             | Default   | Description         |
+| -------------------- | ---------------- | --------- | ------------------- |
+| `format`             | `OutputFormat`   | `JSON`    | Output format       |
+| `path`               | `Optional[Path]` | `None`    | Output file path    |
+| `pretty_print`       | `bool`           | `True`    | JSON pretty print   |
+| `include_timestamps` | `bool`           | `True`    | Include timestamps  |
+| `include_metadata`   | `bool`           | `True`    | Include metadata    |
+| `console_mode`       | `ConsoleMode`    | `SUMMARY` | Console output mode |
 
 OutputFormat Enum:
 
@@ -250,14 +251,14 @@ ConsoleMode Enum:
 - Purpose: Logging settings
 - Usage timing: Part of `ScanConfig`
 
-| Field           | Type             | Default                                      | Description                        |
-| --------------- | ---------------- | -------------------------------------------- | ---------------------------------- |
-| `level`         | `LogLevel`       | `INFO`                                       | Log level                          |
-| `file_path`     | `Optional[Path]`| `None`                                       | Log file path                      |
-| `console_output`| `bool`           | `True`                                       | Whether to print logs to console   |
-| `format`        | `str`            | `"%(asctime)s - %(levelname)s - %(message)s"`| Log format                         |
-| `max_file_size` | `int`            | `10485760`                                   | Max file size (bytes)              |
-| `backup_count`  | `int`            | `3`                                          | Number of backup files             |
+| Field            | Type             | Default                                       | Description                      |
+| ---------------- | ---------------- | --------------------------------------------- | -------------------------------- |
+| `level`          | `LogLevel`       | `INFO`                                        | Log level                        |
+| `file_path`      | `Optional[Path]` | `None`                                        | Log file path                    |
+| `console_output` | `bool`           | `True`                                        | Whether to print logs to console |
+| `format`         | `str`            | `"%(asctime)s - %(levelname)s - %(message)s"` | Log format                       |
+| `max_file_size`  | `int`            | `10485760`                                    | Max file size (bytes)            |
+| `backup_count`   | `int`            | `3`                                           | Number of backup files           |
 
 LogLevel Enum:
 
@@ -276,16 +277,16 @@ LogLevel Enum:
 - Purpose: Shared context during scan execution
 - Usage timing: Created at scan start, passed to plugins
 
-| Field            | Type             | Description                   |
-| ---------------- | ---------------- | ----------------------------- |
-| `scan_id`        | `str`            | Unique scan ID (UUID)         |
-| `start_time`     | `datetime`       | Scan start time               |
-| `config`         | `ScanConfig`     | Scan configuration            |
-| `http_client`    | `HTTPClient`     | HTTP client instance          |
-| `crawler`        | `Crawler`        | Crawler instance              |
-| `session_data`   | `Dict[str, Any]` | Session data                  |
-| `discovered_urls`| `Set[str]`       | Discovered URLs               |
-| `visited_urls`   | `Set[str]`       | Visited URLs                  |
+| Field             | Type             | Description           |
+| ----------------- | ---------------- | --------------------- |
+| `scan_id`         | `str`            | Unique scan ID (UUID) |
+| `start_time`      | `datetime`       | Scan start time       |
+| `config`          | `ScanConfig`     | Scan configuration    |
+| `http_client`     | `HTTPClient`     | HTTP client instance  |
+| `crawler`         | `Crawler`        | Crawler instance      |
+| `session_data`    | `Dict[str, Any]` | Session data          |
+| `discovered_urls` | `Set[str]`       | Discovered URLs       |
+| `visited_urls`    | `Set[str]`       | Visited URLs          |
 
 ---
 
@@ -294,13 +295,13 @@ LogLevel Enum:
 - Purpose: Context provided when running a plugin
 - Usage timing: Created for each plugin execution
 
-| Field           | Type           | Description                   |
-| --------------- | -------------- | ----------------------------- |
-| `plugin_name`   | `str`          | Plugin name                   |
-| `scan_context`  | `ScanContext`  | Global scan context           |
-| `plugin_config` | `PluginConfig` | Plugin configuration          |
-| `target_urls`   | `List[str]`    | URLs for the plugin to scan   |
-| `logger`        | `Logger`       | Logger instance               |
+| Field           | Type           | Description                 |
+| --------------- | -------------- | --------------------------- |
+| `plugin_name`   | `str`          | Plugin name                 |
+| `scan_context`  | `ScanContext`  | Global scan context         |
+| `plugin_config` | `PluginConfig` | Plugin configuration        |
+| `target_urls`   | `List[str]`    | URLs for the plugin to scan |
+| `logger`        | `Logger`       | Logger instance             |
 
 ---
 
@@ -311,27 +312,27 @@ LogLevel Enum:
 - Purpose: Individual vulnerability information
 - Usage timing: Created when a vulnerability is detected
 
-| Field          | Type                    | Required | Default | Description                        |
-| -------------- | ----------------------- | -------- | ------- | ---------------------------------- |
-| `id`           | `str`                   | ✅       | -       | Unique ID (e.g. "sql-001")         |
-| `plugin`       | `str`                   | ✅       | -       | Plugin name                        |
-| `severity`     | `Severity`              | ✅       | -       | Severity                           |
-| `title`        | `str`                   | ✅       | -       | Vulnerability title                |
-| `description`  | `str`                   | ✅       | -       | Detailed description               |
-| `url`          | `Optional[str]`         | ❌       | `None`  | URL where it was found             |
-| `parameter`    | `Optional[str]`         | ❌       | `None`  | Vulnerable parameter name           |
-| `method`       | `Optional[str]`         | ❌       | `None`  | HTTP method                        |
-| `payload`      | `Optional[str]`         | ❌       | `None`  | Attack payload                     |
-| `evidence`     | `Optional[str]`         | ❌       | `None`  | Evidence of vulnerability          |
-| `request`      | `Optional[HTTPRequest]` | ❌       | `None`  | Request information                |
-| `response`     | `Optional[HTTPResponse]`| ❌       | `None`  | Response information               |
-| `remediation`  | `Optional[str]`         | ❌       | `None`  | Remediation guidance               |
-| `references`   | `List[str]`             | ❌       | `[]`    | Reference links                    |
-| `cwe_id`       | `Optional[str]`         | ❌       | `None`  | CWE ID                             |
-| `cvss_score`   | `Optional[float]`       | ❌       | `None`  | CVSS score (0.0-10.0)              |
-| `cvss_vector`  | `Optional[str]`         | ❌       | `None`  | CVSS vector                        |
-| `confidence`   | `Confidence`            | ❌       | `MEDIUM`| Confidence level                   |
-| `timestamp`    | `datetime`              | -        | -       | Discovery time (automatic)         |
+| Field         | Type                     | Required | Default  | Description                |
+| ------------- | ------------------------ | -------- | -------- | -------------------------- |
+| `id`          | `str`                    | ✅       | -        | Unique ID (e.g. "sql-001") |
+| `plugin`      | `str`                    | ✅       | -        | Plugin name                |
+| `severity`    | `Severity`               | ✅       | -        | Severity                   |
+| `title`       | `str`                    | ✅       | -        | Vulnerability title        |
+| `description` | `str`                    | ✅       | -        | Detailed description       |
+| `url`         | `Optional[str]`          | ❌       | `None`   | URL where it was found     |
+| `parameter`   | `Optional[str]`          | ❌       | `None`   | Vulnerable parameter name  |
+| `method`      | `Optional[str]`          | ❌       | `None`   | HTTP method                |
+| `payload`     | `Optional[str]`          | ❌       | `None`   | Attack payload             |
+| `evidence`    | `Optional[str]`          | ❌       | `None`   | Evidence of vulnerability  |
+| `request`     | `Optional[HTTPRequest]`  | ❌       | `None`   | Request information        |
+| `response`    | `Optional[HTTPResponse]` | ❌       | `None`   | Response information       |
+| `remediation` | `Optional[str]`          | ❌       | `None`   | Remediation guidance       |
+| `references`  | `List[str]`              | ❌       | `[]`     | Reference links            |
+| `cwe_id`      | `Optional[str]`          | ❌       | `None`   | CWE ID                     |
+| `cvss_score`  | `Optional[float]`        | ❌       | `None`   | CVSS score (0.0-10.0)      |
+| `cvss_vector` | `Optional[str]`          | ❌       | `None`   | CVSS vector                |
+| `confidence`  | `Confidence`             | ❌       | `MEDIUM` | Confidence level           |
+| `timestamp`   | `datetime`               | -        | -        | Discovery time (automatic) |
 
 ### Severity Enum
 
@@ -354,13 +355,13 @@ LogLevel Enum:
 - Purpose: HTTP request information
 - Usage timing: Part of `Finding`
 
-| Field     | Type                | Description     |
-| --------- | ------------------- | --------------- |
-| `method`  | `str`               | HTTP method     |
-| `url`     | `str`               | Request URL     |
-| `headers` | `Dict[str, str]`    | Request headers |
-| `body`    | `Optional[str]`     | Request body    |
-| `cookies` | `Dict[str, str]`    | Cookies         |
+| Field     | Type             | Description     |
+| --------- | ---------------- | --------------- |
+| `method`  | `str`            | HTTP method     |
+| `url`     | `str`            | Request URL     |
+| `headers` | `Dict[str, str]` | Request headers |
+| `body`    | `Optional[str]`  | Request body    |
+| `cookies` | `Dict[str, str]` | Cookies         |
 
 ---
 
@@ -369,12 +370,12 @@ LogLevel Enum:
 - Purpose: HTTP response information
 - Usage timing: Part of `Finding`
 
-| Field        | Type             | Description                        |
-| ------------ | ---------------- | ---------------------------------- |
-| `status_code`| `int`            | Status code                        |
-| `headers`    | `Dict[str, str]` | Response headers                   |
-| `body`       | `str`            | Response body (max 10KB)           |
-| `elapsed_ms` | `float`          | Response time (milliseconds)       |
+| Field         | Type             | Description                  |
+| ------------- | ---------------- | ---------------------------- |
+| `status_code` | `int`            | Status code                  |
+| `headers`     | `Dict[str, str]` | Response headers             |
+| `body`        | `str`            | Response body (max 10KB)     |
+| `elapsed_ms`  | `float`          | Response time (milliseconds) |
 
 ---
 
@@ -383,18 +384,18 @@ LogLevel Enum:
 - Purpose: Plugin execution result
 - Usage timing: Created after each plugin execution
 
-| Field             | Type                    | Description                   |
-| ----------------- | ----------------------- | ----------------------------- |
-| `plugin_name`     | `str`                   | Plugin name                   |
-| `status`          | `PluginStatus`          | Execution status              |
-| `findings`        | `List[Finding]`         | List of found vulnerabilities |
-| `start_time`      | `datetime`              | Start time                    |
-| `end_time`        | `datetime`              | End time                      |
-| `duration_seconds`| `float`                | Duration (seconds)            |
-| `urls_scanned`    | `int`                   | Number of URLs scanned        |
-| `requests_sent`   | `int`                   | Number of requests sent       |
-| `error`           | `Optional[PluginError]` | Error information             |
-| `metadata`        | `Dict[str, Any]`        | Additional metadata           |
+| Field              | Type                    | Description                   |
+| ------------------ | ----------------------- | ----------------------------- |
+| `plugin_name`      | `str`                   | Plugin name                   |
+| `status`           | `PluginStatus`          | Execution status              |
+| `findings`         | `List[Finding]`         | List of found vulnerabilities |
+| `start_time`       | `datetime`              | Start time                    |
+| `end_time`         | `datetime`              | End time                      |
+| `duration_seconds` | `float`                 | Duration (seconds)            |
+| `urls_scanned`     | `int`                   | Number of URLs scanned        |
+| `requests_sent`    | `int`                   | Number of requests sent       |
+| `error`            | `Optional[PluginError]` | Error information             |
+| `metadata`         | `Dict[str, Any]`        | Additional metadata           |
 
 PluginStatus Enum:
 
@@ -411,18 +412,18 @@ PluginStatus Enum:
 - Purpose: Full scan report
 - Usage timing: Created at scan completion
 
-| Field             | Type                | Description                   |
-| ----------------- | ------------------- | ----------------------------- |
-| `scan_id`         | `str`               | Unique scan ID                |
-| `target_url`      | `str`               | Target URL                    |
-| `scanner_version` | `str`               | Scanner version               |
-| `start_time`      | `datetime`          | Start time                    |
-| `end_time`        | `datetime`          | End time                      |
-| `duration_seconds`| `float`             | Total duration                |
-| `config`          | `ScanConfig`        | Used configuration            |
-| `plugin_results`  | `List[PluginResult]`| List of plugin results        |
-| `summary`         | `ScanSummary`       | Summary information           |
-| `metadata`        | `ScanMetadata`      | Metadata                      |
+| Field              | Type                 | Description            |
+| ------------------ | -------------------- | ---------------------- |
+| `scan_id`          | `str`                | Unique scan ID         |
+| `target_url`       | `str`                | Target URL             |
+| `scanner_version`  | `str`                | Scanner version        |
+| `start_time`       | `datetime`           | Start time             |
+| `end_time`         | `datetime`           | End time               |
+| `duration_seconds` | `float`              | Total duration         |
+| `config`           | `ScanConfig`         | Used configuration     |
+| `plugin_results`   | `List[PluginResult]` | List of plugin results |
+| `summary`          | `ScanSummary`        | Summary information    |
+| `metadata`         | `ScanMetadata`       | Metadata               |
 
 ---
 
@@ -431,16 +432,16 @@ PluginStatus Enum:
 - Purpose: Summary of scan results
 - Usage timing: Part of `ScanReport`
 
-| Field                  | Type                  | Description                        |
-| ---------------------- | --------------------- | ---------------------------------- |
-| `total_vulnerabilities`| `int`                 | Total number of vulnerabilities    |
-| `severity_counts`      | `Dict[Severity, int]` | Counts per severity                |
-| `plugin_counts`        | `Dict[str, int]`      | Counts per plugin                  |
-| `total_urls_scanned`   | `int`                 | Total scanned URLs                 |
-| `total_requests`       | `int`                 | Total requests                     |
-| `success_rate`         | `float`               | Success rate (%)                   |
-| `has_critical`         | `bool`                | Whether any Critical issues exist   |
-| `has_high`             | `bool`                | Whether any High issues exist      |
+| Field                   | Type                  | Description                       |
+| ----------------------- | --------------------- | --------------------------------- |
+| `total_vulnerabilities` | `int`                 | Total number of vulnerabilities   |
+| `severity_counts`       | `Dict[Severity, int]` | Counts per severity               |
+| `plugin_counts`         | `Dict[str, int]`      | Counts per plugin                 |
+| `total_urls_scanned`    | `int`                 | Total scanned URLs                |
+| `total_requests`        | `int`                 | Total requests                    |
+| `success_rate`          | `float`               | Success rate (%)                  |
+| `has_critical`          | `bool`                | Whether any Critical issues exist |
+| `has_high`              | `bool`                | Whether any High issues exist     |
 
 ---
 
@@ -449,14 +450,14 @@ PluginStatus Enum:
 - Purpose: Scan metadata
 - Usage timing: Part of `ScanReport`
 
-| Field           | Type                  | Description                        |
-| --------------- | --------------------- | ---------------------------------- |
-| `hostname`      | `str`                 | Hostname where executed            |
-| `username`      | `str`                 | Executing user                     |
-| `python_version`| `str`                 | Python version                     |
-| `os_info`       | `str`                 | OS information                     |
-| `cli_args`      | `Optional[List[str]]` | CLI arguments (if run via CLI)     |
-| `config_file`   | `Optional[str]`       | Path to configuration file         |
+| Field            | Type                  | Description                    |
+| ---------------- | --------------------- | ------------------------------ |
+| `hostname`       | `str`                 | Hostname where executed        |
+| `username`       | `str`                 | Executing user                 |
+| `python_version` | `str`                 | Python version                 |
+| `os_info`        | `str`                 | OS information                 |
+| `cli_args`       | `Optional[List[str]]` | CLI arguments (if run via CLI) |
+| `config_file`    | `Optional[str]`       | Path to configuration file     |
 
 ---
 
@@ -467,12 +468,12 @@ PluginStatus Enum:
 - Purpose: Base class for all S2N exceptions
 - Usage timing: Raised when errors occur during scan execution
 
-| Field       | Type                | Description            |
-| ----------- | ------------------- | ---------------------- |
-| `message`   | `str`               | Error message          |
-| `error_code`| `str`               | Error code             |
-| `timestamp` | `datetime`          | Occurrence time        |
-| `context`   | `Dict[str, Any]`    | Additional context     |
+| Field        | Type             | Description        |
+| ------------ | ---------------- | ------------------ |
+| `message`    | `str`            | Error message      |
+| `error_code` | `str`            | Error code         |
+| `timestamp`  | `datetime`       | Occurrence time    |
+| `context`    | `Dict[str, Any]` | Additional context |
 
 Subclasses:
 
@@ -490,15 +491,15 @@ Subclasses:
 - Purpose: Error information report
 - Usage timing: Created when errors are captured
 
-| Field         | Type                | Description                   |
-| ------------- | ------------------- | ----------------------------- |
-| `error_type`  | `str`               | Error type                    |
-| `message`     | `str`               | Error message                 |
-| `traceback`   | `Optional[str]`     | Stack trace                   |
-| `timestamp`   | `datetime`          | Occurrence time               |
-| `context`     | `Dict[str, Any]`    | Error context                 |
-| `recoverable` | `bool`              | Whether it is recoverable     |
-| `retry_count` | `int`               | Retry count                   |
+| Field         | Type             | Description               |
+| ------------- | ---------------- | ------------------------- |
+| `error_type`  | `str`            | Error type                |
+| `message`     | `str`            | Error message             |
+| `traceback`   | `Optional[str]`  | Stack trace               |
+| `timestamp`   | `datetime`       | Occurrence time           |
+| `context`     | `Dict[str, Any]` | Error context             |
+| `recoverable` | `bool`           | Whether it is recoverable |
+| `retry_count` | `int`            | Retry count               |
 
 ---
 
@@ -531,12 +532,12 @@ Structure:
 - Purpose: Data for console output
 - Usage timing: Created for console output generation
 
-| Field           | Type                    | Description                   |
-| --------------- | ----------------------- | ----------------------------- |
-| `mode`          | `ConsoleMode`           | Output mode                   |
-| `summary_lines` | `List[str]`            | Summary lines                 |
-| `detail_lines`  | `List[str]`            | Detail lines                  |
-| `progress_info` | `Optional[ProgressInfo]`| Progress information          |
+| Field           | Type                     | Description          |
+| --------------- | ------------------------ | -------------------- |
+| `mode`          | `ConsoleMode`            | Output mode          |
+| `summary_lines` | `List[str]`              | Summary lines        |
+| `detail_lines`  | `List[str]`              | Detail lines         |
+| `progress_info` | `Optional[ProgressInfo]` | Progress information |
 
 ---
 
@@ -545,12 +546,12 @@ Structure:
 - Purpose: Progress information
 - Usage timing: Part of `ConsoleOutput`
 
-| Field        | Type   | Description                   |
-| ------------ | ------ | ----------------------------- |
-| `current`    | `int`  | Current progress              |
-| `total`      | `int`  | Total count                   |
-| `percentage` | `float`| Progress percentage (%)       |
-| `message`    | `str`  | Progress message              |
+| Field        | Type    | Description             |
+| ------------ | ------- | ----------------------- |
+| `current`    | `int`   | Current progress        |
+| `total`      | `int`   | Total count             |
+| `percentage` | `float` | Progress percentage (%) |
+| `message`    | `str`   | Progress message        |
 
 ---
 

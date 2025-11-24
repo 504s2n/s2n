@@ -46,9 +46,16 @@ def cli():
 @click.option("--username", help="인증용 사용자명")
 @click.option("--password", help="인증용 비밀번호")
 @click.option("-o", "--output", help="결과 출력 파일 경로 (예: result.json)")
+@click.option(
+    "--output-format",
+    type=click.Choice([fmt.value for fmt in OutputFormat], case_sensitive=False),
+    default=OutputFormat.JSON.value,
+    show_default=True,
+    help="결과 출력 형식 (JSON, HTML, CSV, CONSOLE, MULTI)",
+)
 @click.option("-v", "--verbose", is_flag=True, help="상세 로그 출력")
 @click.option("--log-file", help="로그 파일 경로")
-def scan(url, plugin, auth, username, password, output, verbose, log_file):
+def scan(url, plugin, auth, username, password, output, output_format, verbose, log_file):
     logger = init_logger(verbose, log_file)
     logger.info("Starting scan for %s", url)
 
@@ -60,6 +67,7 @@ def scan(url, plugin, auth, username, password, output, verbose, log_file):
         username=username,
         password=password,
         output=output,
+        output_format=output_format,
         verbose=verbose,
         log_file=log_file,
     )

@@ -22,14 +22,30 @@ def cliargs_to_scanrequest(args: CLIArguments) -> ScanRequest:
                 auth_type = AuthType(upper_auth)
             except ValueError:
                 raise ValidationError(f"Unknown auth type: {args.auth}")
-        
+
+    # OutputFormat 매핑
+    output_format = OutputFormat.JSON
+    if args.output_format:
+        try:
+            output_format = OutputFormat(args.output_format.upper())
+        except ValueError:
+            raise ValidationError(f"Unknown output format: {args.output_format}")
+    elif args.output:
+        suffix = Path(args.output).suffix.lower()
+        if suffix == ".html":
+            output_format = OutputFormat.HTML
+        elif suffix == ".csv":
+            output_format = OutputFormat.CSV
+        elif suffix == ".json":
+            output_format = OutputFormat.JSON
+    
     # 변환 수행
     return ScanRequest(
         target_url=args.url,
         plugins=args.plugin or [],
         config_path=Path(args.config) if args.config else None,
         auth_type=auth_type,
-        output_format=OutputFormat.JSON,
+        output_format=output_format,
         output_path=Path(args.output) if args.output else None,
         verbose=args.verbose,
     )
