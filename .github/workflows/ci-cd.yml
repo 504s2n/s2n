@@ -2,10 +2,13 @@ name: s2n CI/CD Pipeline
 
 # push: main으로 push -> CI 실행
 # pull_request -> CI 실행
-# release: PyPI 배포 실행
+# push tags: v*.*.* -> 자동 릴리즈 (GitHub Release + PyPI 배포)
+# release: PyPI 배포 실행 (수동 릴리즈)
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*.*.*'  # v0.2.1, v1.0.0 등의 태그 푸시 시 자동 릴리즈
   pull_request:
   release:
     types: [published]
@@ -23,13 +26,29 @@ jobs:
         with:
           python-version: 3.11
       
+      - name: Install project dependencies
+        run: |
+          # Install the package in editable mode with all dependencies
+          pip install -e .
+      
       - name: Install test dependencies
         run: |
-          pip install pytest
+          # Install pytest and responses for HTTP mocking
+          pip install pytest responses pytest-cov
 
       - name: Run tests
         run: |
-          pytest test -v || echo "No tests found, skipping"
+          # Run pytest with verbose output and coverage
+          pytest test -v --cov=s2n --cov-report=term-missing --cov-report=xml
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
 
   build-package:
     needs: build-test
@@ -57,9 +76,66 @@ jobs:
           name: s2n-dist
           path: dist/
 
+  # 태그 푸시 시 자동으로 GitHub Release 생성
+  create-release:
+    needs: build-package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 전체 히스토리 가져오기 (릴리즈 노트 생성용)
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: s2n-dist
+          path: dist/
+
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          # 이전 태그 찾기
+          PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+          
+          # 릴리즈 노트 생성
+          if [ -z "$PREV_TAG" ]; then
+            NOTES="## What's Changed\n\n$(git log --pretty=format:'- %s (%h)' --no-merges)"
+          else
+            NOTES="## What's Changed\n\n$(git log ${PREV_TAG}..HEAD --pretty=format:'- %s (%h)' --no-merges)"
+          fi
+          
+          # 멀티라인 출력을 위한 EOF 사용
+          echo "NOTES<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
+          name: Release ${{ steps.get_version.outputs.TAG_NAME }}
+          body: ${{ steps.release_notes.outputs.NOTES }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
   deploy:
       needs: build-package
-      if: github.event_name == 'release' && github.event.action == 'published'
+      if: github.event_name == 'release' && github.event.action == 'published' || startsWith(github.ref, 'refs/tags/v')
       runs-on: ubuntu-latest
       steps:
         - name: Checkout code
@@ -85,32 +161,42 @@ jobs:
             TWINE_USERNAME: ${{ secrets.PYPI_USER }}
             TWINE_PASSWORD: ${{ secrets.PYPI_PASS }}
           run: |
-            twine upload dist/* --non-interactive || echo "Deployment skipped"
+            twine upload dist/* --non-interactive
   docker-deploy:  
     needs: build-package
+    if: github.event_name == 'release' && github.event.action == 'published' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=latest" >> $GITHUB_OUTPUT
+          fi
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2
-        if: github.event_name == 'release' && github.event.action == 'published'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.DEV_PKG_TOKEN }}
 
-      # 1. 도커 이미지 빌드 2. ghcr에 등록 ghcr.io/<owner>/s2n-docker:latest
+      # 1. 도커 이미지 빌드 2. ghcr에 등록 ghcr.io/<owner>/s2n-docker:latest 및 버전 태그
       - name: Build and push Docker image to GHCR
         uses: docker/build-push-action@v4
-        if: github.event_name == 'release' && github.event.action == 'published'
         with:
           context: .
           file: ./docker/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/s2n-docker:latest
+            ghcr.io/${{ github.repository_owner }}/s2n-docker:${{ steps.get_version.outputs.VERSION }}
+
 
 
 

@@ -8,7 +8,43 @@ permissions:
   packages: write
 
 jobs:
+  test-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      
+      - name: Install project dependencies
+        run: |
+          # Install the package in editable mode with all dependencies
+          pip install -e .
+      
+      - name: Install test dependencies
+        run: |
+          # Install pytest and responses for HTTP mocking
+          pip install pytest responses pytest-cov
+
+      - name: Run tests
+        run: |
+          # Run pytest with verbose output
+          pytest test -v --cov=s2n --cov-report=term-missing
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          file: ./coverage.xml
+          flags: dev-tests
+          name: codecov-dev
+          fail_ci_if_error: false
+
   deploy-dev:
+    needs: test-dev
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

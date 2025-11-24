@@ -26,7 +26,7 @@ Repository = "https://github.com/504s2n/s2n"
 Issues = "https://github.com/504s2n/s2n/issues"
 
 [project.optional-dependencies]
-dev = ["pytest", "build", "twine"]
+dev = ["pytest", "responses", "pytest-cov", "build", "twine"]
 
 [project.scripts]
 s2n = "s2n.s2nscanner.cli.runner:cli"
