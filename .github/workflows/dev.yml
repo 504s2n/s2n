@@ -54,6 +54,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: 3.11
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Install build deps (optional)
         if: always()
@@ -73,14 +78,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.DEV_PKG_TOKEN }}
 
-      # 1. 도커 이미지 빌드 2. ghcr에 등록 ghcr.io/<owner>/s2n:dev and :<sha>
-      - name: Build and push Docker image to GHCR
-        uses: docker/build-push-action@v4
+      # multi-arch 이미지 빌드 + ghcr push
+      - name: Build and push Docker image (multi-arch)
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: ./docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/s2n:dev
             ghcr.io/${{ github.repository_owner }}/s2n:${{ github.sha }}
-          
