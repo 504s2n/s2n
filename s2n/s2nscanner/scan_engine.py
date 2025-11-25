@@ -39,6 +39,7 @@ from s2n.s2nscanner.interfaces import (
     ScanContext,
     ScanMetadata,
     ScanReport,
+    ProgressInfo,
     Severity,
 )
 from s2n.s2nscanner.logger import get_logger
@@ -67,6 +68,7 @@ class Scanner:
         timeout: int = 15,
         logger: Optional[logging.Logger] = None,
         on_finding: Optional[Callable[[Finding], None]] = None,
+        on_progress: Optional[Callable[[ProgressInfo], None]] = None,
         defer_authentication: bool = False,
         skip_auth_plugins: Optional[Sequence[str]] = None,
     ) -> None:
@@ -85,6 +87,7 @@ class Scanner:
         self.concurrency = concurrency
         self.timeout = timeout
         self.on_finding = on_finding
+        self.on_progress = on_progress
 
         self._discovered_plugins: List[Any] = []
         plugin_keys = list(self.config.plugin_configs.keys()) if self.config.plugin_configs else []
@@ -174,7 +177,14 @@ class Scanner:
         if self.auth_adapter and not self.defer_authentication:
             self._ensure_authenticated()
 
-        for plugin in self.discover_plugins():
+        plugins = self.discover_plugins()
+        total_plugins = len(plugins)
+        if total_plugins:
+            self._emit_progress(0, total_plugins, "🧭 스캔 준비 중")
+        else:
+            self._emit_progress(0, 0, "⚠️ 실행할 플러그인이 없습니다.")
+
+        for idx, plugin in enumerate(plugins, start=1):
             plugin_name = getattr(plugin, "name", plugin.__class__.__name__)
             plugin_identifier = self._get_plugin_identifier(plugin)
 
@@ -182,12 +192,16 @@ class Scanner:
                 self._ensure_authenticated()
 
             self.logger.info(f"🔍 Executing plugin: {plugin_name}")
+            self._emit_progress(idx - 1, total_plugins, f"🔄 {plugin_name} 준비 중")
             plugin_config = self._resolve_plugin_config(plugin_name)
+            result: Optional[PluginResult] = None
 
             if not plugin_config.enabled:
                 self.logger.info("⏩ Plugin '%s' disabled via configuration. Skipping.", plugin_name)
                 skipped = self._build_skipped_result(plugin_name, "disabled")
+                result = skipped
                 plugin_results.append(skipped)
+                self._emit_progress(idx, total_plugins, f"⏩ {plugin_name} 비활성화됨")
                 continue
 
             try:
@@ -223,9 +237,18 @@ class Scanner:
 
             except Exception as e:
                 self.logger.exception(f"💥 Plugin '{plugin_name}' crashed: {e}")
-                plugin_results.append(
-                    self._plugin_failure_result(plugin_name, e, datetime.utcnow())
-                )
+                result = self._plugin_failure_result(plugin_name, e, datetime.utcnow())
+                plugin_results.append(result)
+
+            if result:
+                status_icon = {
+                    PluginStatus.SUCCESS: "✅",
+                    PluginStatus.PARTIAL: "🟡",
+                    PluginStatus.FAILED: "❌",
+                    PluginStatus.SKIPPED: "⏩",
+                    PluginStatus.TIMEOUT: "⏰",
+                }.get(result.status, "ℹ️")
+                self._emit_progress(idx, total_plugins, f"{status_icon} {plugin_name} - {result.status.value}")
 
         # --- 리포트 작성
         end_time = datetime.utcnow()
@@ -248,6 +271,7 @@ class Scanner:
             report.duration_seconds,
             len(plugin_results),
         )
+        self._emit_progress(total_plugins, total_plugins or 1, "🏁 스캔 완료")
         return report
 
     def _prepare_scan_context(self, scan_context: Optional[ScanContext]) -> ScanContext:
@@ -643,6 +667,29 @@ class Scanner:
             cli_args=cli_args,
             config_file=str(config_file) if config_file else None,
         )
+
+    def _emit_progress(self, current: int, total: int, message: str) -> None:
+        """
+        ProgressInfo 콜백을 통해 콘솔/상위 UI가 실시간 진행률을 표시할 수 있게 함.
+        """
+        if not self.on_progress:
+            return
+
+        safe_total = total if total > 0 else 1
+        completed = max(0, current)
+        percentage = max(0.0, min(100.0, (completed / safe_total) * 100))
+
+        info = ProgressInfo(
+            current=completed,
+            total=safe_total,
+            percentage=percentage,
+            message=message,
+        )
+
+        try:
+            self.on_progress(info)
+        except Exception:  # pylint: disable=broad-except
+            self.logger.exception("on_progress callback raised an exception.")
 
     def _emit_findings(self, findings: Sequence[Finding]) -> None:
         """

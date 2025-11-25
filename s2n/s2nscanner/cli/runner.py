@@ -1,8 +1,8 @@
 from __future__ import annotations
-from datetime import datetime
 import click
+from datetime import datetime
 
-from s2n.s2nscanner.interfaces import CLIArguments, ScanContext
+from s2n.s2nscanner.interfaces import CLIArguments, ScanContext, ProgressInfo, PluginStatus
 from s2n.s2nscanner.cli.mapper import cliargs_to_scanrequest
 from s2n.s2nscanner.cli.config_builder import build_scan_config
 from s2n.s2nscanner.auth.dvwa_adapter import DVWAAdapter
@@ -12,6 +12,15 @@ from s2n.s2nscanner.logger import init_logger
 
 from rich.console import Console
 from rich.table import Table
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TaskProgressColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 from rich import box
 
 console = Console()
@@ -104,20 +113,45 @@ def scan(url, plugin, auth, username, password, output, output_format, verbose, 
         crawler=None,
     )
 
+    # 진행률 UI 준비
+    progress = Progress(
+        SpinnerColumn(style="bold cyan"),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=None, complete_style="green", finished_style="magenta"),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        console=console,
+        transient=True,
+        auto_refresh=False,
+    )
+    progress_task = progress.add_task("🧭 스캔 준비 중", total=1)
+
+    def on_progress(info: ProgressInfo):
+        total = info.total or 1
+        progress.update(
+            progress_task,
+            total=total,
+            completed=info.current,
+            description=info.message,
+            refresh=True,
+        )
+
     scanner = Scanner(
         config=config,
         scan_context=scan_ctx,
         auth_adapter=auth_adapter,
         auth_credentials=auth_credentials,
         logger=logger,
+        on_progress=on_progress,
     )
 
     # Scan 실행 + Duration 계산
-    start = datetime.utcnow()
-    report = scanner.scan()
-    end = datetime.utcnow()
-
-    duration = (end - start).total_seconds()
+    with progress:
+        start = datetime.utcnow()
+        report = scanner.scan()
+        end = datetime.utcnow()
+        progress.update(progress_task, completed=progress.tasks[0].total, description="🏁 스캔 완료")
 
     # Report 출력
     try:
@@ -126,32 +160,72 @@ def scan(url, plugin, auth, username, password, output, output_format, verbose, 
     except Exception as exc:
         logger.exception("Failed to output report: %s", exc)
 
-    # Rich Summary (Verbose)
-    if verbose:
-        table = Table(
-            title="🚀 S2N Scan Summary",
-            title_style="bold magenta",
-            box=box.SIMPLE_HEAVY,
-            show_header=False,
-            padding=(0, 1),
+    # Rich Summary
+    target_url = getattr(report, "target_url", None) or request.target_url
+    total_findings = sum(len(p.findings) for p in report.plugin_results)
+
+    summary_table = Table(
+        title="🚀 S2N Scan Summary",
+        title_style="bold magenta",
+        box=box.SIMPLE_HEAVY,
+        show_header=False,
+        padding=(0, 1),
+    )
+    summary_table.add_row("🎯 Target URL", f"[bold]{target_url}[/]")
+    summary_table.add_row("🆔 Scan ID", report.scan_id)
+    summary_table.add_row("⏱ Duration", f"{report.duration_seconds:.2f} seconds")
+    summary_table.add_row("🧩 Plugins Loaded", str(len(report.plugin_results)))
+    summary_table.add_row("🔎 Findings Detected", f"[bold yellow]{total_findings}[/]")
+    summary_table.add_row("📄 Output Format", config.output_config.format.value)
+
+    status_styles = {
+        PluginStatus.SUCCESS: "green",
+        PluginStatus.PARTIAL: "yellow",
+        PluginStatus.FAILED: "red",
+        PluginStatus.SKIPPED: "cyan",
+        PluginStatus.TIMEOUT: "magenta",
+    }
+    status_icons = {
+        PluginStatus.SUCCESS: "✅",
+        PluginStatus.PARTIAL: "🟡",
+        PluginStatus.FAILED: "❌",
+        PluginStatus.SKIPPED: "⏩",
+        PluginStatus.TIMEOUT: "⏰",
+    }
+
+    plugin_table = Table(
+        title="🧩 Plugin Results",
+        title_style="bold cyan",
+        box=box.MINIMAL_HEAVY_HEAD,
+        header_style="bold white",
+    )
+    plugin_table.add_column("Plugin")
+    plugin_table.add_column("Status", justify="center")
+    plugin_table.add_column("Findings", justify="right")
+    plugin_table.add_column("Duration", justify="right")
+    plugin_table.add_column("Note")
+
+    for pr in report.plugin_results:
+        status_color = status_styles.get(pr.status, "white")
+        icon = status_icons.get(pr.status, "ℹ️")
+        note = "-"
+        if getattr(pr, "metadata", None):
+            note = pr.metadata.get("reason", note)
+        if pr.error:
+            note = pr.error.message
+
+        plugin_table.add_row(
+            f"{icon} {pr.plugin_name}",
+            f"[{status_color}]{pr.status.value}[/{status_color}]",
+            str(len(pr.findings)),
+            f"{pr.duration_seconds:.2f}s",
+            note or "-",
         )
 
-        # Target URL (config 또는 Report의 target_url)
-        target_url = getattr(report, "target_url", None) or request.target_url
-
-        # Finding 개수
-        total_findings = sum(len(p.findings) for p in report.plugin_results)
-
-        table.add_row("🎯 Target URL", target_url)
-        table.add_row("🆔 Scan ID", report.scan_id)
-        table.add_row("⏱ Duration", f"{report.duration_seconds:.2f} seconds")
-        table.add_row("🧩 Plugins Loaded", str(len(report.plugin_results)))
-        table.add_row("🔎 Findings Detected", str(total_findings))
-        table.add_row("📄 Output Format", config.output_config.format.value)
-
-        console.print("\n")
-        console.print(table)
-        console.print("\n")
+    console.print("\n")
+    console.print(summary_table)
+    console.print(plugin_table)
+    console.print("\n")
 
 
 if __name__ == "__main__":
