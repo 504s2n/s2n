@@ -1,5 +1,4 @@
-import logging
-from typing import List, Any, Optional
+from typing import List
 from datetime import datetime
 from s2n.s2nscanner.plugins.csrf.csrf_constants import USER_AGENT
 
