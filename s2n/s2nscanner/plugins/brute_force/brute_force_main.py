@@ -41,24 +41,27 @@ class BruteForcePlugin:
     def _request_user_confirmation(self, logger) -> bool:
         """
         사용자에게 무차별 대입 공격 실행 여부를 확인합니다.
+        Y/N 외의 입력은 반복해서 재질문하여 오타 입력 시 바로 스킵되지 않도록 합니다.
         """
         warning_message = (
             "\n[WARNING] 이 플러그인은 실제로 무차별 대입 공격(Brute Force)을 수행합니다.\n"
             "이로 인해 발생하는 법적 문제나 서버 부하, 계정 잠금 등의 문제에 대해 책임지지 않습니다.\n"
             "그래도 진행하시겠습니까? (Y/N): "
         )
-        
-        # 로거에는 기록만 남기고, 실제 입력은 표준 입출력 사용
+
         logger.warning("사용자 동의 대기 중...")
-        
+
         try:
-            response = input(warning_message).strip().lower()
-            if response in ['y', 'yes']:
-                logger.info("사용자가 동의하여 스캔을 시작합니다.")
-                return True
-            else:
-                logger.warning("사용자가 동의하지 않아 스캔을 중단합니다.")
-                return False
+            while True:
+                response = input(warning_message).strip().lower()
+                if response in ("y", "yes"):
+                    logger.info("사용자가 동의하여 스캔을 시작합니다.")
+                    return True
+                if response in ("n", "no"):
+                    logger.warning("사용자가 동의하지 않아 스캔을 중단합니다.")
+                    return False
+
+                logger.warning("Y 또는 N으로 입력해주세요. (예: y, n)")
         except EOFError:
             # 입력 스트림이 닫혀있는 경우 (비대화형 환경 등)
             logger.error("입력을 받을 수 없는 환경입니다. 스캔을 중단합니다.")
