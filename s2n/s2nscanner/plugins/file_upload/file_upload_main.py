@@ -84,11 +84,30 @@ class FileUploadPlugin:
                         logger.info(
                             "Attempting DVWA authentication with configured credentials."
                         )
-                        # Base URL 추출 (예: http://localhost:8081)
-                        parsed = urlparse(target_url)
-                        base_url = f"{parsed.scheme}://{parsed.netloc}"
+                        # 로그인 폼의 action을 통해 정확한 로그인 URL 파악
+                        action = login_form.get("action")
+                        # resp.url은 리다이렉션 후의 최종 URL (로그인 페이지일 가능성 높음)
+                        login_full_url = (
+                            urljoin(resp.url, action) if action else resp.url
+                        )
 
-                        adapter = DVWAAdapter(base_url=base_url, client=http_client)
+                        parsed_login = urlparse(login_full_url)
+                        base_url = f"{parsed_login.scheme}://{parsed_login.netloc}"
+                        login_path = parsed_login.path
+
+                        # index_path 추론: login.php와 같은 위치의 index.php 가정
+                        if "/" in login_path:
+                            parent_dir = login_path.rsplit("/", 1)[0]
+                            index_path = f"{parent_dir}/index.php"
+                        else:
+                            index_path = "/index.php"
+
+                        adapter = DVWAAdapter(
+                            base_url=base_url,
+                            login_path=login_path,
+                            index_path=index_path,
+                            client=http_client,
+                        )
                         creds = [(auth_config.username, auth_config.password)]
 
                         if adapter.ensure_authenticated(creds):
