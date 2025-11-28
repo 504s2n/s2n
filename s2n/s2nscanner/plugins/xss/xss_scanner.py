@@ -278,6 +278,7 @@ class ReflectedScanner:
         self._requests_sent = 0
         self._urls_scanned = 0
 
+    # TODO: context_client -> http_client 공용 모듈 및 크롤러 사용하도록 변경
     def _setup_session(
         self, http_client: Any, cookies: Optional[Dict[str, str]]
     ) -> None:

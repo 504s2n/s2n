@@ -2,7 +2,12 @@ from __future__ import annotations
 import click
 from datetime import datetime
 
-from s2n.s2nscanner.interfaces import CLIArguments, ScanContext, ProgressInfo, PluginStatus
+from s2n.s2nscanner.interfaces import (
+    CLIArguments,
+    ScanContext,
+    ProgressInfo,
+    PluginStatus,
+)
 from s2n.s2nscanner.cli.mapper import cliargs_to_scanrequest
 from s2n.s2nscanner.cli.config_builder import build_scan_config
 from s2n.s2nscanner.auth.dvwa_adapter import DVWAAdapter
@@ -38,10 +43,12 @@ def cli():
     .-._)   \ .'  /_ |  |\    |
     \       /|      ||  | \   |
     `-----' `------'`--'  `--'
-    
+
     S2N Web Vulnerability Scanner CLI
     """
-    click.echo(ascii_logo)
+
+    colored_logo = click.style(ascii_logo, fg="blue", bold=True)
+    click.echo(colored_logo)
     click.echo("🔍 Welcome to S2N Scanner! Use --help to explore commands.\n")
 
 
@@ -64,7 +71,9 @@ def cli():
 )
 @click.option("-v", "--verbose", is_flag=True, help="상세 로그 출력")
 @click.option("--log-file", help="로그 파일 경로")
-def scan(url, plugin, auth, username, password, output, output_format, verbose, log_file):
+def scan(
+    url, plugin, auth, username, password, output, output_format, verbose, log_file
+):
     logger = init_logger(verbose, log_file)
     logger.info("Starting scan for %s", url)
 
@@ -91,15 +100,14 @@ def scan(url, plugin, auth, username, password, output, output_format, verbose, 
 
     if (auth or "").lower() == "dvwa":
         logger.info("DVWA authentication requested.")
-        adapter = DVWAAdapter(base_url=request.target_url)
+        auth_adapter = DVWAAdapter(base_url=request.target_url)
         username = username or "admin"
         password = password or "password"
 
-        auth_adapter = adapter
         auth_credentials = [(username, password)]
 
-        if adapter.ensure_authenticated(auth_credentials):
-            http_client = adapter.get_client()
+        if auth_adapter.ensure_authenticated(auth_credentials):
+            http_client = auth_adapter.get_client()
             logger.info("DVWA 로그인 완료")
         else:
             logger.warning("DVWA 로그인 실패 - 인증 없이 진행")
@@ -151,7 +159,9 @@ def scan(url, plugin, auth, username, password, output, output_format, verbose, 
         start = datetime.utcnow()
         report = scanner.scan()
         end = datetime.utcnow()
-        progress.update(progress_task, completed=progress.tasks[0].total, description="🏁 스캔 완료")
+        progress.update(
+            progress_task, completed=progress.tasks[0].total, description="🏁 스캔 완료"
+        )
 
     # Report 출력
     try:
@@ -170,7 +180,11 @@ def scan(url, plugin, auth, username, password, output, output_format, verbose, 
             end = getattr(report, "end_time", getattr(report, "finished_at", None))
             if start and end:
                 duration_seconds = (end - start).total_seconds()
-        duration_text = f"{duration_seconds:.2f} seconds" if isinstance(duration_seconds, (int, float)) else "-"
+        duration_text = (
+            f"{duration_seconds:.2f} seconds"
+            if isinstance(duration_seconds, (int, float))
+            else "-"
+        )
 
         total_findings = 0
         for pr in plugin_results:
@@ -186,10 +200,14 @@ def scan(url, plugin, auth, username, password, output, output_format, verbose, 
         )
         summary_table.add_row("🎯 Target URL", f"[bold]{target_url}[/]")
         summary_table.add_row("🆔 Scan ID", getattr(report, "scan_id", "-"))
-        summary_table.add_row("⏱ Duration", duration_text)
+        summary_table.add_row(" ⏱ Duration", duration_text)
         summary_table.add_row("🧩 Plugins Loaded", str(len(plugin_results)))
-        summary_table.add_row("🔎 Findings Detected", f"[bold yellow]{total_findings}[/]")
-        summary_table.add_row("📄 Output Format", getattr(config.output_config, "format", "-"))
+        summary_table.add_row(
+            "🔎 Findings Detected", f"[bold yellow]{total_findings}[/]"
+        )
+        summary_table.add_row(
+            "📄 Output Format", getattr(config.output_config, "format", "-")
+        )
 
         status_styles = {
             PluginStatus.SUCCESS: "green",

@@ -4,7 +4,7 @@ HTTP Client (requests 기반)
 - 모든 플러그인은 HttpClientProtocol 인터페이스를 구현해야 함
 """
 
-from __future__ import annotations
+from s2n.s2nscanner.logger import get_logger
 
 import time
 from typing import Optional
@@ -36,6 +36,7 @@ class RequestsHttpClient(HttpClientProtocol):
 
         # HTTP 로그 훅 (엔진에서 주입)
         self.log_hook = None
+        self.logger = get_logger("http_client")
 
     # 내부: 재시도 래퍼
     def _send_with_retry(self, method: str, url: str, **kwargs) -> Response:
@@ -48,13 +49,14 @@ class RequestsHttpClient(HttpClientProtocol):
 
         for attempt in range(retry + 1):
             try:
-                merged_kwargs = {
-                    "timeout": self.config.timeout,
-                    "verify": self.config.verify_ssl,
-                    "allow_redirects": self.config.allow_redirects,
-                    **kwargs,
-                }
-
+                merged_kwargs = dict(**kwargs)
+                merged_kwargs.update(
+                    {
+                        "timeout": self.config.timeout,
+                        "verify": self.config.verify_ssl,
+                        "allow_redirects": self.config.allow_redirects,
+                    }
+                )
                 res = self.s.request(method=method, url=url, **merged_kwargs)
 
                 if self.log_hook:

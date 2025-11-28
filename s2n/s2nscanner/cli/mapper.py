@@ -11,6 +11,8 @@ def cliargs_to_scanrequest(args: CLIArguments) -> ScanRequest:
     if not args.url or not args.url.startswith(("http://", "https://")):
         raise ValidationError(f"Invalid URL format: {args.url}")
     
+    # TODO: Depth param 추가
+    
     # AuthType 매핑
     auth_type = None
     if args.auth:
