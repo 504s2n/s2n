@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "s2n"
-version= "0.2.1"
-description = "Plugin-based web vulnerabillity scanner library"
+version = "0.2.2"
+license = {file = "LICENSE"}
+
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
