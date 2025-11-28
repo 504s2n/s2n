@@ -3,9 +3,9 @@ import re
 import urllib.parse
 from collections import deque
 from typing import List
-import logging
+from s2n.s2nscanner.logger import get_logger
 
-logger = logging.getLogger("s2n.crawler")
+logger = get_logger("crawler")
 
 def crawl_recursive(base_url: str, client, depth: int = 2, timeout: int = 5) -> List[str]:
     visited = set()

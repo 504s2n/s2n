@@ -18,6 +18,7 @@
 ### 목적
 
 S2N Scanner의 모든 데이터 흐름에서 사용되는 공통 타입을 정의합니다.
+
 - **CLI 방식**과 **Python Import 방식** 모두 동일한 타입 사용
 - 각 단계(입력 → 설정 → 실행 → 결과 → 출력)별 타입 명확화
 - 타입 안전성 및 데이터 일관성 보장
@@ -93,6 +94,7 @@ Output Types (JSONOutput, HTMLOutput, ConsoleOutput)
 | `username` | `Optional[str]` | ❌ | `--username` |
 | `password` | `Optional[str]` | ❌ | `--password` |
 | `output` | `Optional[str]` | ❌ | `--output, -o` |
+| `output_format` | `Optional[str]` | ❌ | `--output-format` |
 | `depth` | `int` | ❌ | `--depth, -d` (기본값: 2) |
 | `verbose` | `bool` | ❌ | `--verbose, -v` |
 | `log_file` | `Optional[str]` | ❌ | `--log-file` |
@@ -160,6 +162,7 @@ Output Types (JSONOutput, HTMLOutput, ConsoleOutput)
 | `custom_params` | `Dict[str, Any]` | `{}` | 플러그인별 커스텀 파라미터 |
 
 **예시 (SQL Injection 플러그인)**:
+
 ```python
 PluginConfig(
     enabled=True,
@@ -190,6 +193,7 @@ PluginConfig(
 | `cookies` | `Dict[str, str]` | `{}` | 쿠키 |
 
 **AuthType Enum**:
+
 - `NONE`: 인증 없음
 - `BASIC`: HTTP Basic Auth
 - `BEARER`: Bearer Token
@@ -230,6 +234,7 @@ PluginConfig(
 | `console_mode` | `ConsoleMode` | `SUMMARY` | 콘솔 출력 모드 |
 
 **OutputFormat Enum**:
+
 - `JSON`: JSON 파일
 - `HTML`: HTML 리포트
 - `CSV`: CSV 파일
@@ -237,6 +242,7 @@ PluginConfig(
 - `MULTI`: 다중 형식
 
 **ConsoleMode Enum**:
+
 - `SILENT`: 출력 없음
 - `SUMMARY`: 요약만
 - `VERBOSE`: 상세 출력
@@ -259,6 +265,7 @@ PluginConfig(
 | `backup_count` | `int` | `3` | 백업 파일 개수 |
 
 **LogLevel Enum**:
+
 - `DEBUG`
 - `INFO`
 - `WARNING`
@@ -332,6 +339,7 @@ PluginConfig(
 | `timestamp` | `datetime` | - | 발견 시간 (자동) |
 
 **Severity Enum**:
+
 - `CRITICAL`: 치명적
 - `HIGH`: 높음
 - `MEDIUM`: 중간
@@ -339,6 +347,7 @@ PluginConfig(
 - `INFO`: 정보성
 
 **Confidence Enum**:
+
 - `CERTAIN`: 확실
 - `FIRM`: 확고
 - `TENTATIVE`: 잠정적
@@ -393,6 +402,7 @@ PluginConfig(
 | `metadata` | `Dict[str, Any]` | 추가 메타데이터 |
 
 **PluginStatus Enum**:
+
 - `SUCCESS`: 성공
 - `PARTIAL`: 부분 성공
 - `FAILED`: 실패
@@ -470,6 +480,7 @@ PluginConfig(
 | `context` | `Dict[str, Any]` | 추가 컨텍스트 |
 
 **하위 클래스**:
+
 - `NetworkError`: 네트워크 관련 에러
 - `AuthenticationError`: 인증 실패
 - `ConfigurationError`: 설정 오류
@@ -503,6 +514,7 @@ PluginConfig(
 **용도**: JSON 출력 형식
 
 **구조**:
+
 ```json
 {
   "scan_id": "uuid",
@@ -609,6 +621,5 @@ for result in report.plugin_results:
 ```
 
 ---
-
 
 이 문서의 모든 타입은 `s2n/s2nscanner/interfaces.py`에 구현됩니다.

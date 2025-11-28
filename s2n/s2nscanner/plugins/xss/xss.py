@@ -15,8 +15,10 @@ from s2n.s2nscanner.interfaces import (
 )
 
 from .xss_scanner import ReflectedScanner
+from s2n.s2nscanner.logger import get_logger
 
-logger = logging.getLogger("s2n.plugins.xss")
+
+logger = get_logger("plugins.xss")
 
 
 # 페이로드 파일 로드
@@ -43,7 +45,9 @@ class XSSScanner:
     def _build_scanner(self, http_client: Optional[Any] = None) -> ReflectedScanner:
         """Build ReflectedScanner instance with shared http_client"""
         if http_client is None:
-            raise ValueError("XSSScanner requires scan_context.http_client to be provided.")
+            raise ValueError(
+                "XSSScanner requires scan_context.http_client to be provided."
+            )
         return ReflectedScanner(self.payload_path, http_client=http_client)
 
     def run(self, plugin_context: PluginContext) -> PluginResult | PluginError:
@@ -67,7 +71,7 @@ class XSSScanner:
             return PluginError(
                 error_type=type(e).__name__,
                 message=str(e),
-                traceback=str(e.__traceback__)
+                traceback=str(e.__traceback__),
             )
 
         # 결과 래핑
@@ -80,7 +84,7 @@ class XSSScanner:
             end_time=end_time,
             duration_seconds=(end_time - start_time).total_seconds(),
             urls_scanned=getattr(result, "urls_scanned", len(target_urls)),
-            requests_sent=getattr(result, "requests_sent", 1)
+            requests_sent=getattr(result, "requests_sent", 1),
         )
 
 

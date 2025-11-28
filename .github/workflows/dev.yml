@@ -1,0 +1,91 @@
+# DEV branch merge 시 dev용 private package 배포
+on:
+  push:
+    branches: [ dev ]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      
+      - name: Install project dependencies
+        run: |
+          # Install the package in editable mode with all dependencies
+          pip install -e .
+      
+      - name: Install test dependencies
+        run: |
+          # Install pytest and responses for HTTP mocking
+          pip install pytest responses pytest-cov
+
+      - name: Run tests
+        run: |
+          # Run pytest with verbose output
+          pytest test -v --cov=s2n --cov-report=term-missing
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          file: ./coverage.xml
+          flags: dev-tests
+          name: codecov-dev
+          fail_ci_if_error: false
+
+  deploy-dev:
+    needs: test-dev
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install build deps (optional)
+        if: always()
+        run: |
+          python -m pip install --upgrade build
+
+      - name: Build Python package (optional)
+        if: always()
+        run: |
+          python -m build || echo "Build failed or skipped"
+
+      # 깃헙 레지스트리 로그인
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.DEV_PKG_TOKEN }}
+
+      # multi-arch 이미지 빌드 + ghcr push
+      - name: Build and push Docker image (multi-arch)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/s2n:dev
+            ghcr.io/${{ github.repository_owner }}/s2n:${{ github.sha }}

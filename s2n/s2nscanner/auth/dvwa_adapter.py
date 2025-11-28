@@ -20,10 +20,18 @@ import time
 from threading import Lock
 from typing import List, Tuple, Optional, Dict
 from urllib.parse import urljoin
-from s2n.s2nscanner.http.client import HttpClient
+from s2n.s2nscanner.clients.http_client import HttpClient
+from s2n.s2nscanner.logger import get_logger
+
 
 class DVWAAdapter:
-    def __init__(self, base_url: str, login_path="/login.php", index_path="/index.php", client: Optional[HttpClient] = None):
+    def __init__(
+        self,
+        base_url: str,
+        login_path="/login.php",
+        index_path="/index.php",
+        client: Optional[HttpClient] = None,
+    ):
         if not base_url:
             raise ValueError("base_url을 지정하세요 (예: http://localhost/dvwa)")
         self.base = base_url.rstrip("/")
@@ -32,29 +40,39 @@ class DVWAAdapter:
         self._client = client or HttpClient()
         self._lock = Lock()
         self._last_auth = None
+        self.logger = get_logger("dvwa.logger")
 
     # 내부: CSRF 토큰 추출
     def _extract_user_token(self, text: str) -> Optional[str]:
-        match = re.search(r'name=["\']user_token["\']\s+value=["\']([^"\']+)["\']', text)
+        match = re.search(
+            r'name=["\']user_token["\']\s+value=["\']([^"\']+)["\']', text
+        )
         return match.group(1) if match else None
 
     # 로그인 시도
     def authenticate(self, creds: List[Tuple[str, str]]) -> Optional[Tuple[str, str]]:
         """DVWA 로그인 시도, 성공 시 (username, password) 반환"""
         url = f"{self.base}{self.login_path}"
+        # self.logger.info("inner authenticate url: %s >>>>>>>>>> \n", url)
         for user, pw in creds:
             try:
                 # 로그인 페이지에서 토큰 추출
                 resp = self._client.get(url, timeout=10)
                 token = self._extract_user_token(resp.text)
                 data = {"username": user, "password": pw, "Login": "Login"}
+
                 if token:
                     data["user_token"] = token
+
                 post = self._client.post(url, data=data, timeout=10)
                 if "logout.php" in (post.text or "") or "Logout" in (post.text or ""):
                     self._last_auth = (user, pw, time.time())
-                    return (user, pw)
+
+                # Must Return Tuple if login is not failed
+                return (user, pw)
+
             except Exception:
+                self.logger.exception("[DVWAAdapter] Failed to authenticate with %s:%s", user, pw)
                 continue
         return None
 
@@ -96,6 +114,7 @@ class DVWAAdapter:
             print(f"[INFO] 쿠키 저장 완료: {path}")
         except Exception as e:
             print(f"[WARN] 쿠키 저장 실패: {e}")
+
     def load_cookies(self, path: str):
         """저장된 쿠키 JSON을 불러와 세션에 주입"""
         try:

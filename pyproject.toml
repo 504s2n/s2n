@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "s2n"
-version= "0.2.1"
-description = "Plugin-based web vulnerabillity scanner library"
+version = "0.2.2"
+license = {file = "LICENSE"}
+
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
@@ -26,7 +27,7 @@ Repository = "https://github.com/504s2n/s2n"
 Issues = "https://github.com/504s2n/s2n/issues"
 
 [project.optional-dependencies]
-dev = ["pytest", "build", "twine"]
+dev = ["pytest", "responses", "pytest-cov", "build", "twine"]
 
 [project.scripts]
 s2n = "s2n.s2nscanner.cli.runner:cli"

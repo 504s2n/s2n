@@ -1,8 +1,0 @@
-aws
-cli
-core
-deploy
-dist
-infra
-package
-utils

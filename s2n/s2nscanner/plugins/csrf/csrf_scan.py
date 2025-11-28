@@ -1,13 +1,20 @@
-import logging
 import uuid
 from typing import List, Optional, Any
 
-from s2n.s2nscanner.http.client import HttpClient
-from s2n.s2nscanner.interfaces import PluginContext, Finding, HTTPRequest, Severity, Confidence
+from s2n.s2nscanner.clients.http_client import HttpClient
+from s2n.s2nscanner.interfaces import (
+    PluginContext,
+    Finding,
+    HTTPRequest,
+    Severity,
+    Confidence,
+)
 from s2n.s2nscanner.plugins.csrf.csrf_constants import CSRF_TOKEN_KEYWORDS, USER_AGENT
 from s2n.s2nscanner.plugins.csrf.csrf_utils import FormParser
+from s2n.s2nscanner.logger import get_logger
 
-logger = logging.getLogger("s2n.plugins.csrf")
+
+logger = get_logger("plugins.csrf")
 
 
 # TODO:
@@ -17,9 +24,9 @@ logger = logging.getLogger("s2n.plugins.csrf")
 
 
 def csrf_scan(
-        target_url: str,
-        http_client: Optional[HttpClient] = None,
-        plugin_context: Optional[PluginContext] = None,
+    target_url: str,
+    http_client: Optional[HttpClient] = None,
+    plugin_context: Optional[PluginContext] = None,
 ) -> List[Finding]:
     """
     지정된 URL에 대해 CSRF 취약점 검사를 수행합니다.
@@ -37,7 +44,9 @@ def csrf_scan(
     # 세션 및 헤더 설정
     session = getattr(http_client, "s", None)
     if session is None:
-        context_logger.error("HTTPClient must expose an underlying session via attribute 's'.")
+        context_logger.error(
+            "HTTPClient must expose an underlying session via attribute 's'."
+        )
         return results
     if "User-Agent" not in session.headers:
         session.headers.update({"User-Agent": USER_AGENT})
@@ -47,7 +56,7 @@ def csrf_scan(
         resp = session.get(target_url, timeout=10)
         # HTTP Response 메시지를 검증해야함
         # + HTTP 헤더에서 CSRF 필드를 확인해야함
-        # + Form 태그가 왜 들어가야함? 
+        # + Form 태그가 왜 들어가야함?
         # Form 태그 검증 자체로직이 분리되어야함. (클라이언트 / 서버 사이드 양측 검증이 필요함)
         # + 클라이언트에서 쿠키 탈취에 취약할 수 있는 코드 패턴 등 검사해야함.
         html = resp.text
@@ -70,9 +79,12 @@ def csrf_scan(
 
 # HTML 텍스트에서 CSRF 토큰 존재 여부 검사
 # TODO: CSRF HTTP Request/Response 헤더 검사 로직 추가 필요
-# TODO: Form, Input 태그 내의 검사 로직
-# TODO: 정적 검사 추가 
-def scan_html(html: str, resp: Any, target_url: str, ) -> Finding:
+# TODO: 정적 검사 추가
+def scan_html(
+    html: str,
+    resp: Any,
+    target_url: str,
+) -> Finding:
     """
     주어진 HTML에서 CSRF 취약점을 검사합니다.
     CSRF 토큰이 발견되지 않으면 Finding 객체를 반환합니다.
@@ -99,13 +111,15 @@ def scan_html(html: str, resp: Any, target_url: str, ) -> Finding:
                 url=target_url,
                 headers=dict(resp.request.headers),
                 body=None,
-                cookies=dict(resp.request._cookies) if hasattr(resp.request, "_cookies") else {},
+                cookies=dict(resp.request._cookies)
+                if hasattr(resp.request, "_cookies")
+                else {},
             ),
             response=None,
             remediation="Implement anti-CSRF tokens in all forms that perform state-changing actions.",
             references=[
                 "https://owasp.org/www-community/attacks/csrf",
-                "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html"
+                "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html",
             ],
             cwe_id="CWE-352",
             cvss_score=6.8,
@@ -130,13 +144,13 @@ def scan_html(html: str, resp: Any, target_url: str, ) -> Finding:
             url=target_url,
             headers=dict(resp.request.headers),
             body=None,
-            cookies=dict(resp.request._cookies) if hasattr(resp.request, "_cookies") else {},
+            cookies=dict(resp.request._cookies)
+            if hasattr(resp.request, "_cookies")
+            else {},
         ),
         response=None,
         remediation=None,
-        references=[
-            "https://owasp.org/www-community/attacks/csrf"
-        ],
+        references=["https://owasp.org/www-community/attacks/csrf"],
         cwe_id=None,
         cvss_score=None,
         cvss_vector=None,
@@ -149,31 +163,43 @@ def scan_res_headers(headers: dict) -> Finding:
     HTTP 응답 헤더에서 CSRF 관련 보안 헤더를 검사합니다.
     CSRF 보호 헤더가 없으면 Finding 객체를 반환합니다.
     """
-    headings_to_check = ["X-Frame-Options", "Content-Security-Policy", "SameSite"]
-    # TODO: SameSite 쿠키 설정은 쿠키 단위로 검사해야함.
-    # TODO: 와일드카드 값 * 사용 여부 검사
-    # TODO: Set-Cookie, CSP 헤더 값 검사
+    headings_to_check = ["X-Frame-Options", "Content-Security-Policy"]
+    issues = []
 
+    # 기본 헤더 누락 검사
     missing_headings = [h for h in headings_to_check if h not in headers]
     if missing_headings:
+        issues.append(f"Missing headers: {', '.join(missing_headings)}")
+
+    # Set-Cookie 헤더에서 SameSite 쿠키 검사
+    set_cookie = headers.get("Set-Cookie", "")
+    if set_cookie and "samesite" not in set_cookie.lower():
+        issues.append("Set-Cookie without SameSite attribute")
+
+    # CSP 헤더 와일드카드 검사
+    csp = headers.get("Content-Security-Policy", "")
+    if csp and ("*" in csp or "'unsafe-inline'" in csp or "'unsafe-eval'" in csp):
+        issues.append("CSP contains wildcard or unsafe directives")
+
+    if issues:
         return Finding(
             id=str(uuid.uuid4()),
             plugin="csrf",
             severity=Severity.MEDIUM,
-            title="Missing CSRF Protection Headers",
-            description=f"The following CSRF protection headers are missing: {', '.join(missing_headings)}.",
+            title="CSRF Protection Headers Issues",
+            description=f"Security issues detected in CSRF protection headers: {'; '.join(issues)}.",
             url="N/A",
             parameter=None,
             method=None,
             payload=None,
-            evidence=f"Missing headers: {', '.join(missing_headings)}",
+            evidence="; ".join(issues),
             request=None,
             response=None,
             remediation="Implement appropriate CSRF protection headers such as X-Frame-Options, Content-Security-Policy, and SameSite cookies.",
             references=[
                 "https://owasp.org/www-community/controls/Clickjacking_Defense_Cheat_Sheet",
                 "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy",
-                "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite"
+                "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite",
             ],
             cwe_id="CWE-352",
             cvss_score=5.0,
@@ -198,7 +224,7 @@ def scan_res_headers(headers: dict) -> Finding:
         references=[
             "https://owasp.org/www-community/controls/Clickjacking_Defense_Cheat_Sheet",
             "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy",
-            "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite"
+            "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite",
         ],
         cwe_id=None,
         cvss_score=None,
@@ -207,7 +233,11 @@ def scan_res_headers(headers: dict) -> Finding:
     )
 
 
-def scan_form_tags(html: str, resp: Any, target_url: str, ) -> Finding:
+def scan_form_tags(
+    html: str,
+    resp: Any,
+    target_url: str,
+) -> Finding:
     """
     주어진 HTML에서 Form 태그 내 CSRF 취약점을 검사합니다.
     CSRF 토큰이 발견되지 않으면 Finding 객체를 반환합니다.
@@ -235,10 +265,13 @@ def scan_form_tags(html: str, resp: Any, target_url: str, ) -> Finding:
             request=HTTPRequest(
                 method="GET",
                 url=target_url,
-                headers=dict(resp.request.headers) if hasattr(resp, "request") and hasattr(resp.request,
-                                                                                           "headers") else {},
+                headers=dict(resp.request.headers)
+                if hasattr(resp, "request") and hasattr(resp.request, "headers")
+                else {},
                 body=None,
-                cookies=dict(resp.request._cookies) if hasattr(resp.request, "_cookies") else {},
+                cookies=dict(resp.request._cookies)
+                if hasattr(resp.request, "_cookies")
+                else {},
             ),
             response=None,
             remediation="If the application uses forms, ensure anti-CSRF tokens are added to state-changing forms.",
@@ -261,12 +294,15 @@ def scan_form_tags(html: str, resp: Any, target_url: str, ) -> Finding:
             idv = inp.get("id", "").lower()
             itype = inp.get("type", "").lower()
 
-            if itype == "hidden" and ("csrf" in name or "token" in name or "authenticity" in name):
+            if itype == "hidden" and (
+                "csrf" in name or "token" in name or "authenticity" in name
+            ):
                 token_found = True
                 break
 
             if any(k.lower() in name for k in CSRF_TOKEN_KEYWORDS) or any(
-                    k.lower() in idv for k in CSRF_TOKEN_KEYWORDS):
+                k.lower() in idv for k in CSRF_TOKEN_KEYWORDS
+            ):
                 token_found = True
                 break
 
@@ -277,18 +313,25 @@ def scan_form_tags(html: str, resp: Any, target_url: str, ) -> Finding:
             vulnerable.append({"index": idx, "form": form})
 
     if vulnerable:
-        sample = vulnerable[0]["form"]["html"] if isinstance(vulnerable[0]["form"], dict) else str(
-            vulnerable[0]["form"])
+        sample = (
+            vulnerable[0]["form"]["html"]
+            if isinstance(vulnerable[0]["form"], dict)
+            else str(vulnerable[0]["form"])
+        )
         snippet = (sample[:400] + "...") if sample and len(sample) > 400 else sample
-        evidence = f"{len(vulnerable)} form(s) missing CSRF token. Example snippet: {snippet}"
+        evidence = (
+            f"{len(vulnerable)} form(s) missing CSRF token. Example snippet: {snippet}"
+        )
 
         return Finding(
             id=str(uuid.uuid4()),
             plugin="csrf",
             severity=Severity.HIGH,
             title="Form(s) Missing CSRF Token",
-            description=("One or more <form> elements do not appear to include anti-CSRF tokens in hidden inputs "
-                         "or identifiable token fields. This may allow CSRF attacks against state-changing endpoints."),
+            description=(
+                "One or more <form> elements do not appear to include anti-CSRF tokens in hidden inputs "
+                "or identifiable token fields. This may allow CSRF attacks against state-changing endpoints."
+            ),
             url=target_url,
             parameter=None,
             method="GET",
@@ -297,14 +340,19 @@ def scan_form_tags(html: str, resp: Any, target_url: str, ) -> Finding:
             request=HTTPRequest(
                 method="GET",
                 url=target_url,
-                headers=dict(resp.request.headers) if hasattr(resp, "request") and hasattr(resp.request,
-                                                                                           "headers") else {},
+                headers=dict(resp.request.headers)
+                if hasattr(resp, "request") and hasattr(resp.request, "headers")
+                else {},
                 body=None,
-                cookies=dict(resp.request._cookies) if hasattr(resp.request, "_cookies") else {},
+                cookies=dict(resp.request._cookies)
+                if hasattr(resp.request, "_cookies")
+                else {},
             ),
             response=None,
-            remediation=("Add server-validated anti-CSRF tokens (e.g. synchronizer token pattern or SameSite cookies) "
-                         "to all state-changing forms and validate them on the server side."),
+            remediation=(
+                "Add server-validated anti-CSRF tokens (e.g. synchronizer token pattern or SameSite cookies) "
+                "to all state-changing forms and validate them on the server side."
+            ),
             references=[
                 "https://owasp.org/www-community/attacks/csrf",
                 "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html",
@@ -329,9 +377,13 @@ def scan_form_tags(html: str, resp: Any, target_url: str, ) -> Finding:
         request=HTTPRequest(
             method="GET",
             url=target_url,
-            headers=dict(resp.request.headers) if hasattr(resp, "request") and hasattr(resp.request, "headers") else {},
+            headers=dict(resp.request.headers)
+            if hasattr(resp, "request") and hasattr(resp.request, "headers")
+            else {},
             body=None,
-            cookies=dict(resp.request._cookies) if hasattr(resp.request, "_cookies") else {},
+            cookies=dict(resp.request._cookies)
+            if hasattr(resp.request, "_cookies")
+            else {},
         ),
         response=None,
         remediation=None,

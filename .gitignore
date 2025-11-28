@@ -15,6 +15,7 @@ __pycache__/
 .env.dev
 .env.prod
 dist/
+s2n.egg-info/
 
 # Pytest
 .pytest_cache/

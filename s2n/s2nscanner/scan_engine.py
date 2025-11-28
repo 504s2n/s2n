@@ -26,7 +26,7 @@ except ImportError:  # pragma: no cover - <py3.8 fallback>
     import importlib_metadata  # type: ignore
 
 from s2n.s2nscanner.finding import create_plugin_result, create_scan_report
-from s2n.s2nscanner.http.client import HttpClient
+from s2n.s2nscanner.clients.http_client import HttpClient
 from s2n.s2nscanner.interfaces import (
     Confidence,
     Finding,
@@ -39,8 +39,10 @@ from s2n.s2nscanner.interfaces import (
     ScanContext,
     ScanMetadata,
     ScanReport,
+    ProgressInfo,
     Severity,
 )
+from s2n.s2nscanner.logger import get_logger
 
 PLUGIN_PACKAGE = "s2n.s2nscanner.plugins"
 DEFAULT_SCANNER_VERSION = "0.1.0"
@@ -66,6 +68,7 @@ class Scanner:
         timeout: int = 15,
         logger: Optional[logging.Logger] = None,
         on_finding: Optional[Callable[[Finding], None]] = None,
+        on_progress: Optional[Callable[[ProgressInfo], None]] = None,
         defer_authentication: bool = False,
         skip_auth_plugins: Optional[Sequence[str]] = None,
     ) -> None:
@@ -73,7 +76,7 @@ class Scanner:
             raise ValueError("Scanner requires a ScanConfig instance.")
 
         self.config = config
-        self.logger = logger or logging.getLogger("s2n.scanner")
+        self.logger = logger or get_logger("scanner")
         self.auth_adapter = auth_adapter
         self.auth_credentials = auth_credentials or []
         self.defer_authentication = defer_authentication
@@ -84,6 +87,7 @@ class Scanner:
         self.concurrency = concurrency
         self.timeout = timeout
         self.on_finding = on_finding
+        self.on_progress = on_progress
 
         self._discovered_plugins: List[Any] = []
         plugin_keys = list(self.config.plugin_configs.keys()) if self.config.plugin_configs else []
@@ -94,6 +98,8 @@ class Scanner:
         self.prioritized_plugins = ["brute_force"]
         self._scanner_version = self._resolve_version()
         self.scan_context = self._prepare_scan_context(scan_context)
+
+        self.scan_context.logger = self.logger
 
         self.logger.debug(
             "Scanner initialized. target=%s, plugins(preloaded)=%d",
@@ -171,7 +177,14 @@ class Scanner:
         if self.auth_adapter and not self.defer_authentication:
             self._ensure_authenticated()
 
-        for plugin in self.discover_plugins():
+        plugins = self.discover_plugins()
+        total_plugins = len(plugins)
+        if total_plugins:
+            self._emit_progress(0, total_plugins, "🧭 스캔 준비 중")
+        else:
+            self._emit_progress(0, 0, "⚠️ 실행할 플러그인이 없습니다.")
+
+        for idx, plugin in enumerate(plugins, start=1):
             plugin_name = getattr(plugin, "name", plugin.__class__.__name__)
             plugin_identifier = self._get_plugin_identifier(plugin)
 
@@ -179,12 +192,16 @@ class Scanner:
                 self._ensure_authenticated()
 
             self.logger.info(f"🔍 Executing plugin: {plugin_name}")
+            self._emit_progress(idx - 1, total_plugins, f"🔄 {plugin_name} 준비 중")
             plugin_config = self._resolve_plugin_config(plugin_name)
+            result: Optional[PluginResult] = None
 
             if not plugin_config.enabled:
                 self.logger.info("⏩ Plugin '%s' disabled via configuration. Skipping.", plugin_name)
                 skipped = self._build_skipped_result(plugin_name, "disabled")
+                result = skipped
                 plugin_results.append(skipped)
+                self._emit_progress(idx, total_plugins, f"⏩ {plugin_name} 비활성화됨")
                 continue
 
             try:
@@ -220,9 +237,18 @@ class Scanner:
 
             except Exception as e:
                 self.logger.exception(f"💥 Plugin '{plugin_name}' crashed: {e}")
-                plugin_results.append(
-                    self._plugin_failure_result(plugin_name, e, datetime.utcnow())
-                )
+                result = self._plugin_failure_result(plugin_name, e, datetime.utcnow())
+                plugin_results.append(result)
+
+            if result:
+                status_icon = {
+                    PluginStatus.SUCCESS: "✅",
+                    PluginStatus.PARTIAL: "🟡",
+                    PluginStatus.FAILED: "❌",
+                    PluginStatus.SKIPPED: "⏩",
+                    PluginStatus.TIMEOUT: "⏰",
+                }.get(result.status, "ℹ️")
+                self._emit_progress(idx, total_plugins, f"{status_icon} {plugin_name} - {result.status.value}")
 
         # --- 리포트 작성
         end_time = datetime.utcnow()
@@ -245,6 +271,7 @@ class Scanner:
             report.duration_seconds,
             len(plugin_results),
         )
+        self._emit_progress(total_plugins, total_plugins or 1, "🏁 스캔 완료")
         return report
 
     def _prepare_scan_context(self, scan_context: Optional[ScanContext]) -> ScanContext:
@@ -383,8 +410,13 @@ class Scanner:
         plugin_name: str,
         plugin_config: PluginConfig,
         ) -> PluginResult:
+
+        # 0. 초기화 및 Context 준비 (initialize)
+        # plugin instance는 discover_plugins()에서 이미 생성됨
+        # 인스턴스 생성 시 __init__()가 호출되었으므로 별도 초기화 단계는 없음
+
         start_time = datetime.utcnow()
-        plugin_logger = logging.getLogger(f"s2n.plugins.{plugin_name}")
+        plugin_logger = get_logger(f"plugins.{plugin_name}")
 
         self.logger.debug(f"🚀 Running plugin '{plugin_name}' with config: {plugin_config}")
 
@@ -396,7 +428,7 @@ class Scanner:
             logger=plugin_logger,
         )
 
-        # --- set_logger / configure
+        # 레거시 호환성: set_logger / configure 호출 (새 플러그인은 __Init__에서 처리)
         for method_name in ("set_logger", "configure"):
             if hasattr(plugin, method_name):
                 try:
@@ -406,40 +438,82 @@ class Scanner:
                     self.logger.debug(f"⚠️ {plugin_name}.{method_name}() failed: {e}")
 
         # --- run() 실행
+        # 1. pre-scan
+        if hasattr(plugin, "pre_scan"):
+            try:
+                self.logger.info(f"🔧 Pre-scan setup for plugin '{plugin_name}'")
+                plugin.pre_scan(plugin_context)
+                self.logger.info(f"✅ Pre-scan for plugin '{plugin_name}' completed.")
+            except Exception as exc:
+                self.logger.exception(f"💣 Exception during {plugin_name}.pre_scan(): {exc}")
+
+        # 2. run
+        raw_result = None
         if hasattr(plugin, "run"):
             try:
+                self.logger.info(f"▶️ Executing run() for plugin '{plugin_name}'")
                 raw_result = plugin.run(plugin_context)
                 self.logger.debug(f"🧩 Plugin '{plugin_name}' run() finished, return type={type(raw_result).__name__}")
 
-                # PluginResult 직접 반환 시 그대로 사용
-                if isinstance(raw_result, PluginResult):
-                    self.logger.debug(f"✅ '{plugin_name}' returned valid PluginResult.")
-                    return raw_result
-
-                # dict/list/Finding 등 변환 처리
-                findings = self._normalize_findings(plugin_name, raw_result, self.config.target_url)
-                self.logger.debug(f"📊 '{plugin_name}' normalized findings count={len(findings)}")
-
-                return create_plugin_result(
-                    plugin_name=plugin_name,
-                    findings=findings,
-                    start_time=start_time,
-                    status=PluginStatus.SUCCESS,
-                )
-
             except Exception as exc:
                 self.logger.exception(f"💣 Exception during {plugin_name}.run(): {exc}")
-                return self._plugin_failure_result(plugin_name, exc, start_time)
+                raw_result = self._plugin_failure_result(plugin_name, exc, start_time)
 
-        else:
-            self.logger.warning(f"⚠️ Plugin '{plugin_name}' has no run() method.")
+        # 3. post-scan
+        is_result_plugin_result = isinstance(raw_result, PluginResult)
+
+        if not is_result_plugin_result and hasattr(plugin, "post_scan"):
+            try:
+                self.logger.info(f"▶️ {plugin_name}.post_scan() started")
+                final_result = plugin.post_scan(plugin_context)
+                self.logger.info(f"✅ {plugin_name}.post_scan() completed")
+
+                if not isinstance(final_result, PluginResult):
+                    raise TypeError("post_scan() must return a PluginResult instance, got {type(final_result).__name__}")
+                
+                raw_result = final_result
+            
+            except Exception as exc:
+                self.logger.exception(f"💣 Exception during {plugin_name}.post_scan(): {exc}")
+                raw_result = self._plugin_failure_result(plugin_name, exc, start_time)
+                
+
+        # 4. cleanup
+        if hasattr(plugin, "cleanup"):
+            try:
+                self.logger.info(f"🧹 {plugin_name}.cleanup() started")
+                plugin.cleanup(plugin_context)
+                self.logger.info(f"✅ {plugin_name}.cleanup() completed")
+            except Exception as exc:
+                self.logger.exception(f"⚠️ Exception during {plugin_name}.cleanup(): {exc}")
+
+        # 5. 최종 결과 반환 및 정규화
+        if raw_result is None:
+            if not hasattr(plugin, "run") and not hasattr(plugin, "post_scan"):
+                self.logger.warning(f"⚠️ Plugin '{plugin_name}' has no run() or post_scan() method. Skipping.")
+                return self._build_skipped_result(plugin_name, "no run() or post_scan() method")
+            
+            err = PluginError(error_type="PluginContractError", message="plugin returned None", timestamp=datetime.utcnow)
+            return self._plugin_failure_result(plugin_name, err, start_time)
+        
+
+        if not isinstance(raw_result, PluginResult):
+            findings = self._normalize_findings(plugin_name, raw_result, self.config.target_url)
+            self.logger.debug(f"📊 '{plugin_name}' normalized findings count={len(findings)}")
+
             return create_plugin_result(
                 plugin_name=plugin_name,
-                findings=[],
+                findings=findings,
                 start_time=start_time,
-                status=PluginStatus.SKIPPED,
-                metadata={"reason": "no run() method"},
+                status=PluginStatus.SUCCESS,
             )
+
+        findings = getattr(raw_result, "findings", None) 
+        if findings is not None:
+            self._emit_findings(findings)
+
+        return raw_result
+        
 
     def _plugin_failure_result(
         self,
@@ -593,6 +667,29 @@ class Scanner:
             cli_args=cli_args,
             config_file=str(config_file) if config_file else None,
         )
+
+    def _emit_progress(self, current: int, total: int, message: str) -> None:
+        """
+        ProgressInfo 콜백을 통해 콘솔/상위 UI가 실시간 진행률을 표시할 수 있게 함.
+        """
+        if not self.on_progress:
+            return
+
+        safe_total = total if total > 0 else 1
+        completed = max(0, current)
+        percentage = max(0.0, min(100.0, (completed / safe_total) * 100))
+
+        info = ProgressInfo(
+            current=completed,
+            total=safe_total,
+            percentage=percentage,
+            message=message,
+        )
+
+        try:
+            self.on_progress(info)
+        except Exception:  # pylint: disable=broad-except
+            self.logger.exception("on_progress callback raised an exception.")
 
     def _emit_findings(self, findings: Sequence[Finding]) -> None:
         """

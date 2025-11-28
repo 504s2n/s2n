@@ -1,4 +1,3 @@
-pytest
 requests
 selenium~=4.20
 beautifulsoup4~=4.12

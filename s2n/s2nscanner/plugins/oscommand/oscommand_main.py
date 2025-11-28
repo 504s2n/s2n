@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from uuid import uuid4
 
 from s2n.s2nscanner.crawler import crawl_recursive
-from s2n.s2nscanner.http.client import HttpClient
+from s2n.s2nscanner.clients.http_client import HttpClient
 from s2n.s2nscanner.interfaces import (
     Finding,
     PluginContext,
@@ -28,8 +28,10 @@ from .oscommand_utils import (
     extract_params,
     match_pattern,
 )
+from s2n.s2nscanner.logger import get_logger
 
-logger = logging.getLogger("s2n.plugins.oscommand")
+
+logger = get_logger("plugins.oscommand")
 
 # 기본 페이로드 / 패턴 / 파라미터 후보
 DEFAULT_PAYLOADS: Sequence[str] = [
@@ -38,7 +40,7 @@ DEFAULT_PAYLOADS: Sequence[str] = [
     "|id",
     ";whoami",
     "|whoami",
-    ";cat /etc/passwd",
+    ";echo vulnerable",
     "|uname -a",
     "&echo vulnerable",
 ]

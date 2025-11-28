@@ -10,6 +10,7 @@ from s2n.s2nscanner.interfaces import (
     AuthConfig,
     AuthType,
     PluginConfig,
+    ConsoleMode,
 )
 
 
@@ -38,7 +39,7 @@ def build_scan_config(
         format=req.output_format,
         path=req.output_path,
         pretty_print=True,
-        console_mode=("DEBUG" if req.verbose else "SUMMARY"),
+        console_mode=(ConsoleMode.DEBUG if req.verbose else ConsoleMode.SUMMARY),
     )
 
     # 로깅 설정 구성

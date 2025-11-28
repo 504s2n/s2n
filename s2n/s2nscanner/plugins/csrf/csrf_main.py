@@ -12,9 +12,11 @@ from s2n.s2nscanner.interfaces import (
     PluginStatus,
 )
 from s2n.s2nscanner.plugins.csrf.csrf_scan import csrf_scan
+from s2n.s2nscanner.logger import get_logger
+
 
 # 전용 로거
-logger = logging.getLogger("s2n.plugins.csrf")
+logger = get_logger("plugins.csrf")
 
 
 # ======= CSRF 스캐너 기능 개발부 =========

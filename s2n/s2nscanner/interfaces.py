@@ -95,6 +95,7 @@ class CLIArguments:
     username: Optional[str] = None
     password: Optional[str] = None
     output: Optional[str] = None
+    output_format: Optional[str] = None
     depth: int = 2
     verbose: bool = False
     log_file: Optional[str] = None
