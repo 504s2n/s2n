@@ -211,6 +211,7 @@ def test_run_with_csrf_token(plugin, plugin_context, mock_http_client):
     ):
         mock_uuid.uuid4.return_value.hex = "12345678"
         result = plugin.run(plugin_context)
+        print(f"result: {result}")
 
     # Assert
     assert result.status == PluginStatus.SUCCESS

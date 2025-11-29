@@ -15,9 +15,6 @@
 """
 
 from s2n.s2nscanner.interfaces import PluginError
-from test.mock_data import MockPluginContext
-from test.mock_data import MockScanConfig
-from test.mock_data import MockScanContext
 import pytest
 import responses
 from urllib.parse import unquote, parse_qs, urlparse
@@ -27,34 +24,13 @@ from s2n.s2nscanner.interfaces import (
     ScanConfig,
     PluginConfig,
     PluginContext,
+    PluginStatus
 )
+from s2n.s2nscanner.plugins.xss.xss_scan import ReflectedScanner, InputPoint
+from s2n.s2nscanner.plugins.xss.xss_main import XSSScanner
 
 
 # Try to import from s2n package, fail if not available (integration tests require the package)
-try:
-    from s2n.s2nscanner.plugins.xss.xss_scanner import ReflectedScanner, InputPoint
-    from s2n.s2nscanner.plugins.xss.xss import XSSScanner
-    from s2n.s2nscanner.interfaces import PluginStatus
-except ImportError:
-    # Fallback for when running in an environment where s2n is not installed as a package
-    # This might happen during development if PYTHONPATH is not set correctly
-    import sys
-    from pathlib import Path
-
-    # Add project root to sys.path if not present
-    project_root = Path(__file__).parents[3]
-    if str(project_root) not in sys.path:
-        sys.path.insert(0, str(project_root))
-
-    from s2n.s2nscanner.plugins.xss.xss_scanner import ReflectedScanner, InputPoint
-    from s2n.s2nscanner.plugins.xss.xss import XSSScanner
-
-    try:
-        from s2n.s2nscanner.interfaces import PluginStatus
-    except ImportError:
-        # If interfaces are not available, use the one from xss_scanner if defined there
-        from s2n.s2nscanner.plugins.xss.xss_scanner import PluginStatus
-
 
 def _patch_http_client_timeout_issue(http_client):
     """Patch HttpClient to fix timeout parameter conflict.
