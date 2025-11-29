@@ -163,12 +163,7 @@ def scan(
             progress_task, completed=progress.tasks[0].total, description="🏁 스캔 완료"
         )
 
-    # Report 출력
-    try:
-        output_report(report, config.output_config)
-        logger.info("Scan report successfully generated.")
-    except Exception as exc:
-        logger.exception("Failed to output report: %s", exc)
+  
 
     # Rich Summary (fail-safe for tests with minimal FakeScanReport)
     try:
@@ -263,6 +258,13 @@ def scan(
         console.print("\n")
     except Exception as exc:  # pylint: disable=broad-except
         logger.debug("Failed to render summary tables: %s", exc)
+
+    # Report 출력
+    try:
+        output_report(report, config.output_config)
+        logger.info("Scan report successfully generated.")
+    except Exception as exc:
+        logger.exception("Failed to output report: %s", exc)
 
 
 if __name__ == "__main__":

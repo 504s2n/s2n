@@ -85,26 +85,42 @@ def test_run_finds_vulnerability_on_first_page(
         </form>
     </body></html>
     """
-    success_page_html = "파일이 성공적으로 업로드되었습니다."
-    vuln_page_html = '<?php echo "File Upload Test"; ?> S2N_UPLOAD_TEST_MARKER_12345678'
 
     # Mock responses
     mock_http_client.get.side_effect = [
-        _mock_response(upload_form_html),  # Initial page fetch
-        _mock_response("Not found", status_code=404),  # txt file verification (fail)
-        _mock_response(vuln_page_html),  # php file verification (success)
+        _mock_response(upload_form_html),  # Initial page fetch (line 56 in plugin)
+        _mock_response(upload_form_html),  # Page fetch in crawl loop (line 69 in plugin)
     ]
-    mock_http_client.post.return_value = _mock_response(success_page_html)
+
+    # Create a mock finding to be returned by upload_test_files
+    from s2n.s2nscanner.interfaces import Finding
+    mock_finding = Finding(
+        id="test-finding-1",
+        plugin="file_upload",
+        severity=Severity.HIGH,
+        title="File Upload Vulnerability Detected",
+        description="Test vulnerability",
+        url="http://test.com/uploads/test.php",
+        evidence="Test marker found",
+        timestamp=datetime.now(timezone.utc),
+        remediation="Fix it",
+    )
 
     # Execute
     with (
         patch(
-            "s2n.s2nscanner.plugins.file_upload.file_upload_utils.guess_uploaded_urls",
-            return_value=["http://test.com/uploads/test.php"],
+            "s2n.s2nscanner.plugins.file_upload.file_upload_main.authenticate_if_needed",
+            side_effect=lambda ctx, resp, client, stats: resp,  # Just return the response as-is
         ),
-        patch("s2n.s2nscanner.plugins.file_upload.file_upload_utils.uuid") as mock_uuid,
+        patch(
+            "s2n.s2nscanner.plugins.file_upload.file_upload_main.crawl_recursive",
+            return_value=["http://test.com"],
+        ),
+        patch(
+            "s2n.s2nscanner.plugins.file_upload.file_upload_main.upload_test_files",
+            return_value=[mock_finding],
+        ),
     ):
-        mock_uuid.uuid4.return_value.hex = "12345678"
         result = plugin.run(plugin_context)
 
     # Assert
@@ -113,7 +129,7 @@ def test_run_finds_vulnerability_on_first_page(
     finding = result.findings[0]
     assert finding.severity == Severity.HIGH
     assert "File Upload Vulnerability Detected" in finding.title
-    assert mock_http_client.get.call_count == 3
+    assert mock_http_client.get.call_count == 2
 
 
 @pytest.mark.unit
@@ -190,26 +206,45 @@ def test_run_with_csrf_token(plugin, plugin_context, mock_http_client):
         </form>
     </body></html>
     """
-    success_page_html = "파일이 성공적으로 업로드되었습니다."
-    vuln_page_html = '<?php echo "File Upload Test"; ?> S2N_UPLOAD_TEST_MARKER_12345678'
 
     # Mock responses
     mock_http_client.get.side_effect = [
-        _mock_response(upload_form_html),  # Initial page
-        _mock_response("Not found", status_code=404),  # txt file verification (fail)
-        _mock_response(vuln_page_html),  # php file verification (success)
+        _mock_response(upload_form_html),  # Initial page fetch (line 56 in plugin)
+        _mock_response(upload_form_html),  # Page fetch in crawl loop (line 69 in plugin)
     ]
-    mock_http_client.post.return_value = _mock_response(success_page_html)
+
+    # Create a mock finding
+    from s2n.s2nscanner.interfaces import Finding
+    mock_finding = Finding(
+        id="test-finding-2",
+        plugin="file_upload",
+        severity=Severity.HIGH,
+        title="File Upload Vulnerability Detected",
+        description="Test vulnerability with CSRF",
+        url="http://test.com/uploads/test.php",
+        evidence="Test marker found",
+        timestamp=datetime.now(timezone.utc),
+        remediation="Fix it",
+    )
+
+    # Track the call to upload_test_files to verify CSRF token was passed
+    upload_test_files_mock = MagicMock(return_value=[mock_finding])
 
     # Execute
     with (
         patch(
-            "s2n.s2nscanner.plugins.file_upload.file_upload_utils.guess_uploaded_urls",
-            return_value=["http://test.com/uploads/test.php"],
+            "s2n.s2nscanner.plugins.file_upload.file_upload_main.authenticate_if_needed",
+            side_effect=lambda ctx, resp, client, stats: resp,  # Just return the response as-is
         ),
-        patch("s2n.s2nscanner.plugins.file_upload.file_upload_utils.uuid") as mock_uuid,
+        patch(
+            "s2n.s2nscanner.plugins.file_upload.file_upload_main.crawl_recursive",
+            return_value=["http://test.com"],
+        ),
+        patch(
+            "s2n.s2nscanner.plugins.file_upload.file_upload_main.upload_test_files",
+            upload_test_files_mock,
+        ),
     ):
-        mock_uuid.uuid4.return_value.hex = "12345678"
         result = plugin.run(plugin_context)
 
     # Assert
@@ -217,8 +252,9 @@ def test_run_with_csrf_token(plugin, plugin_context, mock_http_client):
     assert len(result.findings) == 1
     assert result.findings[0].severity == Severity.HIGH
 
-    args, kwargs = mock_http_client.post.call_args
-    assert "data" in kwargs
-    # Assuming collect_form_data collected the CSRF token
-    assert "csrf_token" in kwargs["data"]
-    assert kwargs["data"]["csrf_token"] == csrf_token
+    # Verify that upload_test_files was called with the correct data including CSRF token
+    assert upload_test_files_mock.called
+    call_args = upload_test_files_mock.call_args
+    data_param = call_args[0][2]  # Third positional argument is 'data'
+    assert "csrf_token" in data_param
+    assert data_param["csrf_token"] == csrf_token

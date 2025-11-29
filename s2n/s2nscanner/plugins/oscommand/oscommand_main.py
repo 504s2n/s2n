@@ -8,7 +8,6 @@ OS Command Injection Plugin
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Sequence, Tuple
 from uuid import uuid4

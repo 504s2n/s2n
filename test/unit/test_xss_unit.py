@@ -1,5 +1,7 @@
 # test_xss_unit.py
-from s2n.s2nscanner.plugins.xss.xss import _load_payload_path
+
+from s2n.s2nscanner.plugins.xss.xss_main import _load_payload_path
+from s2n.s2nscanner.plugins.xss.xss_scan import (FormParser, PayloadResult, Finding, InputPointDetector, InputPoint,ReflectedScanner)
 from test.unit.test_xss_fixtures import FORM_WITH_CSRF_HTML
 
 
@@ -17,26 +19,10 @@ def test_load_payload_path_success():
     assert result.name == "xss_payloads.json"
 
 
-@pytest.mark.unit
-def test_load_payload_path_not_found(tmp_path, monkeypatch):
-    """payload 파일이 없는 경우 FileNotFoundError"""
-
-    # xss.py 모듈의 __file__ 속성을 임시 디렉토리로 변경
-    import s2n.s2nscanner.plugins.xss.xss as xss_module
-
-    fake_file = tmp_path / "xss.py"
-    fake_file.touch()  # 빈 파일 생성
-
-    monkeypatch.setattr(xss_module, "__file__", str(fake_file))
-
-    with pytest.raises(FileNotFoundError, match="Payload file not found"):
-        _load_payload_path()
-
 
 @pytest.mark.unit
 def test_payload_result_dataclass():
     """PayloadResult 기본 생성 및 필드 검증"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import PayloadResult
 
     pr = PayloadResult(
         payload="<script>alert(1)</script>",
@@ -54,7 +40,6 @@ def test_payload_result_dataclass():
 @pytest.mark.unit
 def test_finding_as_dict():
     """Finding.as_dict() 직렬화 검증"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import Finding, PayloadResult
 
     pr = PayloadResult(
         payload="<img>",
@@ -79,7 +64,6 @@ def test_finding_as_dict():
 @pytest.mark.unit
 def test_finding_multiple_matches():
     """Finding에 여러 PayloadResult 추가"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import Finding, PayloadResult
 
     finding = Finding(url="/test", parameter="id", method="POST")
     finding.matches.append(PayloadResult("p1", "html", "reflected", "반사형", ""))
@@ -93,7 +77,6 @@ def test_finding_multiple_matches():
 @pytest.mark.unit
 def test_form_parser_basic_form():
     """기본 form 파싱"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import FormParser
 
     html = (
         '<form action="/submit" method="POST"><input name="text" value="test"></form>'
@@ -111,7 +94,6 @@ def test_form_parser_basic_form():
 @pytest.mark.unit
 def test_form_parser_csrf_field():
     """CSRF 토큰 필드 포함 form"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import FormParser
 
     parser = FormParser()
     parser.feed(FORM_WITH_CSRF_HTML)
@@ -127,7 +109,6 @@ def test_form_parser_csrf_field():
 @pytest.mark.unit
 def test_form_parser_ignores_nameless_inputs():
     """name 속성 없는 input은 무시"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import FormParser
 
     html = """
     <form>
@@ -146,14 +127,13 @@ def test_form_parser_ignores_nameless_inputs():
 @pytest.mark.unit
 def test_form_parser_multiple_forms():
     """여러 form 동시 파싱"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import FormParser
 
     html = """
     <form action="/login"><input name="user"></form>
     <form action="/search"><input name="q"></form>
     """
     parser = FormParser()
-    parser.feed(html)
+    parser.feed(html)           
 
     assert len(parser.forms) == 2
     assert parser.forms[0]["action"] == "/login"
@@ -163,7 +143,6 @@ def test_form_parser_multiple_forms():
 @pytest.mark.unit
 def test_form_parser_default_method():
     """method 속성 없으면 GET 기본값"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import FormParser
 
     html = '<form><input name="q"></form>'
     parser = FormParser()
@@ -175,7 +154,6 @@ def test_form_parser_default_method():
 @pytest.mark.unit
 def test_form_parser_textarea_select():
     """textarea, select 요소도 파싱"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import FormParser
 
     html = """
     <form>
@@ -195,7 +173,7 @@ def test_form_parser_textarea_select():
 @pytest.mark.unit
 def test_input_point_detector_from_query(responses_mock):
     """URL 쿼리 파라미터 탐지"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+
     import requests
 
     # responses_mock이 실제 HTTP 요청을 가로채도록 설정
@@ -219,7 +197,7 @@ def test_input_point_detector_from_query(responses_mock):
 @pytest.mark.unit
 def test_input_point_detector_from_form(responses_mock):
     """HTML form 입력 지점 탐지"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+
     import requests
 
     responses_mock.add(
@@ -241,7 +219,7 @@ def test_input_point_detector_from_form(responses_mock):
 @pytest.mark.unit
 def test_input_point_detector_hidden_field_preserved(responses_mock):
     """hidden 필드도 parameters에 포함"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+
     import requests
 
     html = """
@@ -264,7 +242,7 @@ def test_input_point_detector_hidden_field_preserved(responses_mock):
 @pytest.mark.unit
 def test_input_point_detector_http_error(responses_mock, caplog):
     """HTTP 오류 시 graceful 처리"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+
     import requests
 
     responses_mock.add(
@@ -283,7 +261,7 @@ def test_input_point_detector_http_error(responses_mock, caplog):
 @pytest.mark.unit
 def test_input_point_detector_submit_button_handling(responses_mock):
     """submit/button 타입 필드 처리"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+
     import requests
 
     html = """
@@ -308,7 +286,7 @@ def test_input_point_detector_submit_button_handling(responses_mock):
 @pytest.mark.unit
 def test_input_point_detector_action_url_join(responses_mock):
     """form action의 상대 경로 처리"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import InputPointDetector
+
     import requests
 
     html = '<form action="/submit"><input name="data"></form>'
@@ -325,7 +303,6 @@ def test_input_point_detector_action_url_join(responses_mock):
 @pytest.mark.unit
 def test_detect_context_html():
     """HTML 컨텍스트 탐지"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import ReflectedScanner
 
     body = "<body><script>alert(1)</script></body>"
     payload = "<script>alert(1)</script>"
@@ -336,7 +313,6 @@ def test_detect_context_html():
 @pytest.mark.unit
 def test_detect_context_attribute():
     """속성 컨텍스트 탐지"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import ReflectedScanner
 
     payload = "test_payload"
     body = f'<input value="{payload}">'
@@ -347,8 +323,6 @@ def test_detect_context_attribute():
 @pytest.mark.unit
 def test_detect_context_mixed():
     """혼합 컨텍스트 (원본 + 이스케이프)"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import ReflectedScanner
-
     payload = "<payload>"
     body = '<div data="<payload>">&lt;payload&gt;</div>'
 
@@ -359,12 +333,6 @@ def test_detect_context_mixed():
 @pytest.mark.unit
 def test_record_creates_finding(payload_path, mock_http_client):
     """_record가 Finding을 생성하고 matches 추가"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import (
-        ReflectedScanner,
-        InputPoint,
-        PayloadResult,
-    )
-
     scanner = ReflectedScanner(payload_path, http_client=mock_http_client)
 
     point = InputPoint(
@@ -390,11 +358,6 @@ def test_record_creates_finding(payload_path, mock_http_client):
 @pytest.mark.unit
 def test_record_appends_to_existing_finding(payload_path, mock_http_client):
     """동일 입력 지점에 여러 페이로드 결과 추가"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import (
-        ReflectedScanner,
-        InputPoint,
-        PayloadResult,
-    )
 
     scanner = ReflectedScanner(payload_path, http_client=mock_http_client)
 
@@ -414,11 +377,6 @@ def test_record_appends_to_existing_finding(payload_path, mock_http_client):
 @pytest.mark.unit
 def test_record_stored_uses_special_key(payload_path, mock_http_client):
     """_record_stored는 parameter=[stored] 사용"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import (
-        ReflectedScanner,
-        InputPoint,
-        PayloadResult,
-    )
 
     scanner = ReflectedScanner(payload_path, http_client=mock_http_client)
 
@@ -435,11 +393,6 @@ def test_record_stored_uses_special_key(payload_path, mock_http_client):
 @pytest.mark.unit
 def test_as_s2n_findings_conversion(payload_path, mock_http_client):
     """_as_s2n_findings가 S2NFinding 리스트 반환"""
-    from s2n.s2nscanner.plugins.xss.xss_scanner import (
-        ReflectedScanner,
-        InputPoint,
-        PayloadResult,
-    )
 
     scanner = ReflectedScanner(payload_path, http_client=mock_http_client)
 

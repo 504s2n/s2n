@@ -37,6 +37,8 @@ class BruteForcePlugin:
     def __init__(self, config: Any = None):
         # config 타입을 PluginConfig 대신 Any로 받아 유연성을 확보합니다.
         self.config = config
+        # depth: config에서 가져오거나 기본값 2 사용 (참고용, brute force는 crawler 미사용)
+        self.depth = int(getattr(config, "depth", 2)) if config else 2
 
     def _request_user_confirmation(self, logger) -> bool:
         """
