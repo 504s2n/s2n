@@ -12,6 +12,9 @@ def cliargs_to_scanrequest(args: CLIArguments) -> ScanRequest:
         raise ValidationError(f"Invalid URL format: {args.url}")
     
     # TODO: Depth param 추가
+   
+    depth = int(args.depth) if args.depth else 2
+    
     
     # AuthType 매핑
     auth_type = None

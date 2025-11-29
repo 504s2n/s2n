@@ -83,6 +83,7 @@ class ScanRequest:
     output_format: OutputFormat = OutputFormat.JSON
     output_path: Optional[Path] = None
     verbose: bool = False
+    depth: int = 2
 
 
 @dataclass(frozen=True)
