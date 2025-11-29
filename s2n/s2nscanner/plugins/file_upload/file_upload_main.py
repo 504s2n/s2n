@@ -12,21 +12,17 @@ from s2n.s2nscanner.interfaces import (
 from s2n.s2nscanner.logger import get_logger
 from s2n.s2nscanner.crawler import crawl_recursive
 
+from .file_upload_utils import (
+        collect_form_data,
+        authenticate_if_needed,
+        find_upload_form,
+        upload_test_files,
+    )
+
+from urllib.parse import urljoin
+
 # 헬퍼 함수 임포트
-try:
-    from .file_upload_utils import (
-        collect_form_data,
-        authenticate_if_needed,
-        find_upload_form,
-        upload_test_files,
-    )
-except ImportError:
-    from file_upload_utils import (
-        collect_form_data,
-        authenticate_if_needed,
-        find_upload_form,
-        upload_test_files,
-    )
+    
 
 logger = get_logger("plugins.file_upload")
 
@@ -82,7 +78,6 @@ class FileUploadPlugin:
                     
                     # Prepare upload parameters
                     action = form.get("action") or url
-                    from urllib.parse import urljoin
                     action_url = urljoin(url, action)
                     method = str(form.get("method", "post")).lower()
                     
