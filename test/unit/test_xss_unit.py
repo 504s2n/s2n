@@ -1,5 +1,5 @@
 # test_xss_unit.py
-from s2n.s2nscanner.plugins.xss.xss import _load_payload_path
+from s2n.s2nscanner.plugins.xss.xss_main import _load_payload_path
 from test.unit.test_xss_fixtures import FORM_WITH_CSRF_HTML
 
 

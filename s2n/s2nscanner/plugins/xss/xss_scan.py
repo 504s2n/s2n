@@ -25,6 +25,7 @@ from s2n.s2nscanner.interfaces import (
     Severity,
 )
 from s2n.s2nscanner.logger import get_logger
+from s2n.s2nscanner.crawler import crawl_recursive
 
 
 logger = get_logger("plugins.xss")
@@ -264,6 +265,7 @@ class ReflectedScanner:
         payloads_path: Path,
         http_client: Any,
         cookies: Optional[Dict[str, str]] = None,
+        depth: int = 2,
     ):
         if http_client is None:
             raise ValueError(
@@ -271,6 +273,7 @@ class ReflectedScanner:
             )
 
         self.transport = http_client
+        self.depth = depth
         self._setup_session(http_client, cookies)
         self.payloads = self._load_payloads(payloads_path)
         self.detector = InputPointDetector(self.transport)
@@ -471,7 +474,18 @@ class ReflectedScanner:
             status = PluginStatus.SKIPPED
         else:
             try:
-                for url in target_urls:
+                # 크롤러를 사용하여 각 target URL에서 추가 URL 발견
+                all_urls = []
+                for base_url in target_urls:
+                    crawled_urls = crawl_recursive(base_url, http_client, depth=self.depth, timeout=timeout)
+                    all_urls.extend(crawled_urls)
+                
+                # 중복 제거
+                all_urls = list(dict.fromkeys(all_urls))
+                logger.info(f"[XSS] Crawled {len(all_urls)} URLs from {len(target_urls)} target(s)")
+                
+                # 모든 발견된 URL 스캔
+                for url in all_urls:
                     self._scan_single_url(url, http_client, max_payloads, timeout)
             except Exception as exc:  # noqa: BLE001
                 status = PluginStatus.FAILED

@@ -28,13 +28,13 @@ class SQLInjectionPlugin:
         start_dt = datetime.now()
         findings: List[Finding] = []
 
-        # ScanContext에서 http_client 가져오기 (이미 인증된 클라이언트일 수 있음)
+        # Extract configuration from plugin context
         client = resolve_client(self, plugin_context)
         depth = resolve_depth(self, plugin_context)
         target_url = resolve_target_url(self, plugin_context)
 
         try:
-            # TODO: sqli_scan 내부에서 bfs 크롤링 확인
+            # Scan for SQL injection vulnerabilities (crawler integrated in sqli_scan)
             scan_result = sqli_scan(
                 target_url,
                 http_client=client,
@@ -57,6 +57,7 @@ class SQLInjectionPlugin:
                 duration_seconds=(datetime.now() - start_dt).total_seconds(),
             )
 
+        # Determine status based on findings
         status = PluginStatus.PARTIAL if findings else PluginStatus.SUCCESS
 
         return PluginResult(

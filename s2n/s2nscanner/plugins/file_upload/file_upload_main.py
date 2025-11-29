@@ -1,9 +1,5 @@
 from typing import List
 from datetime import datetime
-from s2n.s2nscanner.plugins.csrf.csrf_constants import USER_AGENT
-
-import requests
-from urllib.parse import urljoin
 
 # interfaces에서 제공되는 타입 사용
 from s2n.s2nscanner.interfaces import (
@@ -14,20 +10,21 @@ from s2n.s2nscanner.interfaces import (
     PluginStatus,
 )
 from s2n.s2nscanner.logger import get_logger
+from s2n.s2nscanner.crawler import crawl_recursive
 
 # 헬퍼 함수 임포트
 try:
     from .file_upload_utils import (
         collect_form_data,
         authenticate_if_needed,
-        find_upload_form_recursive,
+        find_upload_form,
         upload_test_files,
     )
 except ImportError:
     from file_upload_utils import (
         collect_form_data,
         authenticate_if_needed,
-        find_upload_form_recursive,
+        find_upload_form,
         upload_test_files,
     )
 
@@ -40,7 +37,8 @@ class FileUploadPlugin:
 
     def __init__(self, config: PluginContext | None = None):
         self.config = config or {}
-        self.plugin_context = self.config or {}
+        # depth: config에서 가져오거나 기본값 2 사용
+        self.depth = int(getattr(self.config, "depth", 2))
 
     def run(self, plugin_context: PluginContext) -> PluginResult | PluginError:
         start_time = datetime.now()
@@ -48,98 +46,69 @@ class FileUploadPlugin:
         stats = {"requests_sent": 0, "urls_scanned": 0}
         target_url = plugin_context.scan_context.config.target_url
         http_client = plugin_context.scan_context.http_client
-
-        if "User-Agent" not in http_client.s.headers:
-            http_client.s.headers.update({"User-Agent": USER_AGENT})
+        
+        # depth 옵션 추출 (plugin_config에서 우선, 없으면 인스턴스 기본값)
+        depth = self.depth
+        plugin_cfg = getattr(plugin_context, "plugin_config", None)
+        if plugin_cfg and getattr(plugin_cfg, "custom_params", None):
+            depth = int(plugin_cfg.custom_params.get("depth", depth))
 
         try:
-            logger.info("[*] Fetching upload page: %s", target_url)
+            logger.info("[*] Starting file upload scan on: %s (depth=%d)", target_url, depth)
+            
+            # 1. Initial request and authentication
             resp = http_client.get(target_url, timeout=10)
             stats["requests_sent"] += 1
             stats["urls_scanned"] += 1
-
-            # 1. Authenticate if needed (updates stats internally if requests made)
             resp = authenticate_if_needed(plugin_context, resp, http_client, stats)
 
-            # 2. Find upload form (recursive)
-            form, found_at = find_upload_form_recursive(
-                target_url, http_client, plugin_context, resp, stats
-            )
+            # 2. Crawl to discover URLs
+            crawled_urls = crawl_recursive(target_url, http_client, depth=depth, timeout=10)
+            logger.info("[*] Discovered %d URLs to scan for upload forms", len(crawled_urls))
+            
+            # 3. Search for upload forms across discovered URLs
+            for url in crawled_urls:
+                try:
+                    logger.info("[*] Checking for upload form at: %s", url)
+                    page_resp = http_client.get(url, timeout=10)
+                    stats["requests_sent"] += 1
+                    stats["urls_scanned"] += 1
+                    
+                    form = find_upload_form(page_resp.text)
+                    if not form:
+                        continue
+                    
+                    logger.info("[+] Found upload form at: %s", url)
+                    
+                    # Prepare upload parameters
+                    action = form.get("action") or url
+                    from urllib.parse import urljoin
+                    action_url = urljoin(url, action)
+                    method = str(form.get("method", "post")).lower()
+                    
+                    if method != "post":
+                        logger.warning("Form method is not POST (method=%s). Skipping.", method)
+                        continue
+                    
+                    data = collect_form_data(form)
+                    file_input = next((i for i in form.inputs if i.get("type") == "file"), None)
+                    if not file_input:
+                        logger.info("No file input found in form. Skipping.")
+                        continue
+                    
+                    file_field_name = str(file_input.get("name", "file"))
+                    
+                    # Execute upload tests
+                    logger.info("[*] Testing file upload at: %s", action_url)
+                    new_findings = upload_test_files(
+                        http_client, action_url, data, file_field_name, self.name, stats
+                    )
+                    findings.extend(new_findings)
+                    
+                except Exception as e:
+                    logger.warning("Error scanning URL %s: %s", url, e)
+                    continue
 
-            if form is None:
-                logger.info("No upload form found on the page.")
-                return PluginResult(
-                    plugin_name=self.name,
-                    status=PluginStatus.SUCCESS,
-                    findings=findings,
-                    start_time=start_time,
-                    end_time=datetime.now(),
-                    duration_seconds=(datetime.now() - start_time).total_seconds(),
-                    urls_scanned=stats["urls_scanned"],
-                    requests_sent=stats["requests_sent"],
-                )
-
-            # 3. Prepare for upload
-            action = form.get("action") or found_at
-            action_url = urljoin(str(found_at), str(action))
-            method = str((form.get("method") or "post")).lower()
-            logger.info(f"Action URL: {action_url}")
-            logger.info(f"Method: {method}")
-
-            if method != "post":
-                logger.warning("Form method is not POST (method=%s). Skipping.", method)
-                return PluginResult(
-                    plugin_name=self.name,
-                    status=PluginStatus.SKIPPED,
-                    start_time=start_time,
-                    end_time=datetime.now(),
-                    duration_seconds=(datetime.now() - start_time).total_seconds(),
-                )
-
-            data = collect_form_data(form)
-            file_input = next((i for i in form.inputs if i.get("type") == "file"), None)
-            file_field_name = (
-                str(file_input.get("name")) or "file" if file_input else "file"
-            )
-
-            if not file_input or not file_field_name:
-                logger.info("No file input field found in the upload form.")
-                return PluginResult(
-                    plugin_name=self.name,
-                    status=PluginStatus.SUCCESS,
-                    findings=findings,
-                    start_time=start_time,
-                    end_time=datetime.now(),
-                    duration_seconds=(datetime.now() - start_time).total_seconds(),
-                    urls_scanned=stats["urls_scanned"],
-                    requests_sent=stats["requests_sent"],
-                )
-
-            # 4. Execute upload tests
-            new_findings = upload_test_files(
-                http_client, action_url, data, file_field_name, self.name, stats
-            )
-            findings.extend(new_findings)
-
-        except requests.exceptions.ConnectionError as e:
-            error_msg = str(e)
-            # Check if this is a localhost connection issue (common in Docker)
-            if "localhost" in target_url or "127.0.0.1" in target_url:
-                helpful_msg = (
-                    f"Connection refused to {target_url}. "
-                    "If running inside Docker, 'localhost' refers to the container itself. "
-                    "Try using 'host.docker.internal' (Docker Desktop) or the target container's name instead. "
-                    f"Original error: {error_msg}"
-                )
-            else:
-                helpful_msg = f"Failed to connect to {target_url}. Please verify the target is reachable. Original error: {error_msg}"
-
-            logger.error("[!] Connection error: %s", helpful_msg)
-            return PluginError(
-                error_type="ConnectionError",
-                message=helpful_msg,
-                traceback=str(e.__traceback__),
-            )
         except Exception as e:
             logger.exception("[!] Error during file upload testing: %s", e)
             return PluginError(
