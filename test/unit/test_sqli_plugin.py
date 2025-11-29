@@ -1,4 +1,5 @@
 
+from s2n.s2nscanner.logger import get_logger
 import pytest
 from unittest.mock import MagicMock, patch
 from s2n.s2nscanner.plugins.sqlinjection.sqli_main import SQLInjectionPlugin
@@ -32,7 +33,8 @@ def mock_context():
         http_client=client,
         auth_config=SimpleNamespace(auth_adapter=None)
     )
-    return SimpleNamespace(scan_context=scan_context)
+    logger = get_logger()
+    return SimpleNamespace(scan_context=scan_context, logger=logger)
 
 def test_sqli_plugin_detects_boolean_based(mock_context):
     plugin = SQLInjectionPlugin()
